@@ -310,7 +310,7 @@ int main (int argc, char** argv)
     double **tmp2 = myE; myE = myE_prev; myE_prev = tmp2; 
     if (plot_freq){
       // TODO: Gather data from all processes
-      MPI_Gather(myE[1], n * (myRowSize), MPI_DOUBLE, E[0], n*n, MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+      MPI_Gather(myE[1], n * (myRowSize), MPI_DOUBLE, E[1], n*n, MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
       
       if (myrank == 0){
         int k = (int)(t/plot_freq);
@@ -322,7 +322,8 @@ int main (int argc, char** argv)
   }//end of while loop
 
   // TODO: Gather data from all processes
-  MPI_Gather(myE[1], n * (myRowSize), MPI_DOUBLE, E[0], n*n, MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+  MPI_Gather(myE[1], n * myRowSize, MPI_DOUBLE, E[1], n*n, MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+  
   if (myrank == 0)
   {  
     double time_elapsed = getTime() - t0;
