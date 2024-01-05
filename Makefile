@@ -2,6 +2,7 @@ include ./arch.gnu
 # OPTIMIZATION = -fast
 # OPTIMIZATION = -O3
 # DEBUG += -g
+#mpicxx -I/kuacc/apps/openmpi/4.0.1/include -c cardiacsim.C -o cardiacsim.o
 
 
 app:		cardiacsim
@@ -13,4 +14,4 @@ cardiacsim:	        $(OBJECTS)
 
 clean:	
 	$(RM) *.o cardiacsim *~;
-	$(RM) core;
+	$sdsa(RM) core;
