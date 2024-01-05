@@ -14,6 +14,8 @@
 #include <string.h>
 #include <math.h>
 #include <sys/time.h>
+
+//TODO: include mpi.h
 using namespace std;
 
 
@@ -91,14 +93,20 @@ void simulate (double** E,  double** E_prev,double** R,
   
     for (j=1; j<=m; j++) 
       E_prev[j][0] = E_prev[j][2];
+    // no need for a second loop, can combine loops
     for (j=1; j<=m; j++) 
       E_prev[j][n+1] = E_prev[j][n-1];
+   
+    // TODO: fix this for MPI programming
     
+    /* 
     for (i=1; i<=n; i++) 
       E_prev[0][i] = E_prev[2][i];
+    // no need for a second loop, can combine loops
     for (i=1; i<=n; i++) 
       E_prev[m+1][i] = E_prev[m-1][i];
-    
+    */
+
     // Solve for the excitation, the PDE
     for (j=1; j<=m; j++){
       for (i=1; i<=n; i++) {
@@ -146,6 +154,44 @@ int main (int argc, char** argv)
 
   cmdLine( argc, argv, T, n,px, py, plot_freq, no_comm, num_threads);
   m = n;  
+  
+  int P, myrank; 
+  int tag1 = 1, tag2 = 2;
+     
+  /* Initializations */
+  MPI_Init(&argc, &argv);
+  MPI_Comm_size(MPI_COMM_WORLD, &P);
+  MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+  
+  MPI_Request reqs[4];
+  MPI_Request reqs_2[2];
+  MPI_Status stats[4];
+  MPI_Status stats_2[2];
+  // matrix size N*N
+  // for part 1 each processor should work on N/P rows 
+  // TODO: add local variables myE, myE_prev, my_R
+  double **myE, **myR, **myE_prev;
+  // Allocation
+  int myRowSize = m/P;
+  myE = alloc2D(myRowSize+2 , n+2); 
+  myE_prev = alloc2D(myRowSize+2 , n+2); 
+  myR = alloc2D(myRowSize+2 , n+2); 
+
+  int i,j;
+  // Initialization
+  for (j=1; j<=myRowSize; j++)
+    for (i=1; i<=n; i++)
+      myE_prev[j][i] = myR[j][i] = 0;
+  
+  for (j=1; j<=myRowSize; j++)
+    for (i=n/2+1; i<=n; i++)
+      myE_prev[j][i] = 1.0;
+  
+  for (j=myRowSize/2+1; j<=myRowSize; j++)
+    for (i=1; i<=n; i++)
+      myR[j][i] = 1.0;
+
+
   // Allocate contiguous memory for solution arrays
   // The computational box is defined on [1:m+1,1:n+1]
   // We pad the arrays in order to facilitate differencing on the 
@@ -154,7 +200,6 @@ int main (int argc, char** argv)
   E_prev = alloc2D(m+2,n+2);
   R = alloc2D(m+2,n+2);
   
-  int i,j;
   // Initialization
   for (j=1; j<=m; j++)
     for (i=1; i<=n; i++)
@@ -167,6 +212,7 @@ int main (int argc, char** argv)
   for (j=m/2+1; j<=m; j++)
     for (i=1; i<=n; i++)
       R[j][i] = 1.0;
+  
   
   double dx = 1.0/n;
 
@@ -200,20 +246,81 @@ int main (int argc, char** argv)
     
     t += dt;
     niter++;
- 
-    simulate(E, E_prev, R, alpha, n, m, kk, dt, a, epsilon, M1, M2, b); 
+    
+    //TODO: add communication
+    // send north -- tag1
+    // send south -- tag2
+    // receive north -- tag2
+    // receive south -- tag1
+    if (myrank == 0){
+        // send and receive data from south, mirror for north
+        
+        // receive from south
+        MPI_Irecv(&myE_prev[myRowSize+1][0], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, reqs[0]);
+
+        // send to south
+        MPI_Isend(&myE_prev[myRowSize][0], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, reqs[1]);
+        // mirror for north    
+        for (i=1; i<=n; i++) 
+          E_prev[0][i] = E_prev[2][i];
+    }
+    else if (myrank == P-1){
+        // send and receive data from north, mirror for south
+        
+        // receive from north
+        MPI_Irecv(&myE_prev[0][0], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, reqs[0]);
+
+        // send to north
+        MPI_Isend(&myE_prev[1][0], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, reqs[1]);
+        
+        // mirror for south
+        for (i=1; i<=n; i++) 
+          E_prev[myRowSize+1][i] = E_prev[myRowSize-1][i];
+    }
+    else{
+        // send and receive data both from north and south
+        
+        // receive from north
+        MPI_Irecv(&myE_prev[0][0], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, reqs[0]);
+        // receive from south
+        MPI_Irecv(&myE_prev[myRowSize+1][0], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, reqs[1]);
+    
+        // send to north
+        MPI_Isend(&myE_prev[1][0], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, reqs[2]);
+        // send to south
+        MPI_Isend(&myE_prev[myRowSize][0], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, reqs[3]);
+        
+    }
+    
+    if (myrank == 0 || myrank == P -1){
+      MPI_Waitall(2, reqs_2, stats_2);    
+    }
+    else {
+      MPI_Waitall(4, reqs, stats);    
+    }
+
+    simulate(myE, myE_prev, myR, alpha, n, myRowSize, kk, dt, a, epsilon, M1, M2, b); 
+    
+    //simulate(E, E_prev, R, alpha, n, m, kk, dt, a, epsilon, M1, M2, b); 
     
     //swap current E with previous E
     double **tmp = E; E = E_prev; E_prev = tmp;
-    
+   
+    double **tmp2 = myE; myE = myE_prev; myE_prev = tmp2; 
     if (plot_freq){
-      int k = (int)(t/plot_freq);
-      if ((t - k * plot_freq) < dt){
-	splot(E,t,niter,m+2,n+2);
+      // TODO: Gather data from all processes
+       
+      
+      if (myrank == 0){
+        int k = (int)(t/plot_freq);
+        if ((t - k * plot_freq) < dt){
+	        splot(E,t,niter,m+2,n+2);
+        }
       }
     }
   }//end of while loop
 
+  // TODO: Gather data from all processes
   double time_elapsed = getTime() - t0;
 
   double Gflops = (double)(niter * (1E-9 * n * n ) * 28.0) / time_elapsed ;
@@ -237,5 +344,10 @@ int main (int argc, char** argv)
   free (E_prev);
   free (R);
   
+  free (myE);
+  free (myE_prev);
+  free (myR);
+ 
+  MPI_Finalize(); 
   return 0;
 }
