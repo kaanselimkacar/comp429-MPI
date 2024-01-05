@@ -156,7 +156,7 @@ int main (int argc, char** argv)
   cmdLine( argc, argv, T, n,px, py, plot_freq, no_comm, num_threads);
   m = n;  
   
-  int P, myrank; 
+  int P = 1, myrank = 0; 
   int tag1 = 1, tag2 = 2;
      
   /* Initializations */
@@ -224,15 +224,17 @@ int main (int argc, char** argv)
   double dt = (dte<dtr) ? 0.95*dte : 0.95*dtr;
   double alpha = d*dt/(dx*dx);
 
-  cout << "Grid Size       : " << n << endl; 
-  cout << "Duration of Sim : " << T << endl; 
-  cout << "Time step dt    : " << dt << endl; 
-  cout << "Process geometry: " << px << " x " << py << endl;
-  if (no_comm)
-    cout << "Communication   : DISABLED" << endl;
+  if (myrank == 0)
+  {
+    cout << "Grid Size       : " << n << endl; 
+    cout << "Duration of Sim : " << T << endl; 
+    cout << "Time step dt    : " << dt << endl; 
+    cout << "Process geometry: " << px << " x " << py << endl;
+    if (no_comm)
+      cout << "Communication   : DISABLED" << endl;
   
-  cout << endl;
-  
+    cout << endl;
+  }
   // Start the timer
   double t0 = getTime();
   
@@ -257,10 +259,10 @@ int main (int argc, char** argv)
         // send and receive data from south, mirror for north
         
         // receive from south
-        MPI_Irecv(&myE_prev[myRowSize+1][0], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs[0]);
+        MPI_Irecv(&myE_prev[myRowSize+1][1], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs[0]);
 
         // send to south
-        MPI_Isend(&myE_prev[myRowSize][0], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs[1]);
+        MPI_Isend(&myE_prev[myRowSize][1], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs[1]);
         // mirror for north    
         for (i=1; i<=n; i++) 
           E_prev[0][i] = E_prev[2][i];
@@ -269,10 +271,10 @@ int main (int argc, char** argv)
         // send and receive data from north, mirror for south
         
         // receive from north
-        MPI_Irecv(&myE_prev[0][0], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs[0]);
+        MPI_Irecv(&myE_prev[0][1], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs[0]);
 
         // send to north
-        MPI_Isend(&myE_prev[1][0], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs[1]);
+        MPI_Isend(&myE_prev[1][1], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs[1]);
         
         // mirror for south
         for (i=1; i<=n; i++) 
@@ -282,14 +284,14 @@ int main (int argc, char** argv)
         // send and receive data both from north and south
         
         // receive from north
-        MPI_Irecv(&myE_prev[0][0], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs[0]);
+        MPI_Irecv(&myE_prev[0][1], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs[0]);
         // receive from south
-        MPI_Irecv(&myE_prev[myRowSize+1][0], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs[1]);
+        MPI_Irecv(&myE_prev[myRowSize+1][1], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs[1]);
     
         // send to north
-        MPI_Isend(&myE_prev[1][0], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs[2]);
+        MPI_Isend(&myE_prev[1][1], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs[2]);
         // send to south
-        MPI_Isend(&myE_prev[myRowSize][0], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs[3]);
+        MPI_Isend(&myE_prev[myRowSize][1], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs[3]);
         
     }
     
@@ -310,7 +312,7 @@ int main (int argc, char** argv)
     double **tmp2 = myE; myE = myE_prev; myE_prev = tmp2; 
     if (plot_freq){
       // TODO: Gather data from all processes
-      MPI_Gather(myE[1], n * (myRowSize), MPI_DOUBLE, E[1], n*n, MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+      MPI_Gather(&myE[1][0], (n+2) * (myRowSize), MPI_DOUBLE, &E[1][0], n*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
       
       if (myrank == 0){
         int k = (int)(t/plot_freq);
@@ -322,7 +324,7 @@ int main (int argc, char** argv)
   }//end of while loop
 
   // TODO: Gather data from all processes
-  MPI_Gather(myE[1], n * myRowSize, MPI_DOUBLE, E[1], n*n, MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+  MPI_Gather(&myE[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E[1][0], n*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
   
   if (myrank == 0)
   {  
