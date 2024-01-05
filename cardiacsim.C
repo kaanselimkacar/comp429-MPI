@@ -16,6 +16,7 @@
 #include <sys/time.h>
 
 //TODO: include mpi.h
+#include <mpi.h>
 using namespace std;
 
 
@@ -165,8 +166,8 @@ int main (int argc, char** argv)
   
   MPI_Request reqs[4];
   MPI_Request reqs_2[2];
-  MPI_Status stats[4];
-  MPI_Status stats_2[2];
+  MPI_Status mpi_stats[4];
+  MPI_Status mpi_stats_2[2];
   // matrix size N*N
   // for part 1 each processor should work on N/P rows 
   // TODO: add local variables myE, myE_prev, my_R
@@ -256,10 +257,10 @@ int main (int argc, char** argv)
         // send and receive data from south, mirror for north
         
         // receive from south
-        MPI_Irecv(&myE_prev[myRowSize+1][0], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, reqs[0]);
+        MPI_Irecv(&myE_prev[myRowSize+1][0], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs[0]);
 
         // send to south
-        MPI_Isend(&myE_prev[myRowSize][0], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, reqs[1]);
+        MPI_Isend(&myE_prev[myRowSize][0], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs[1]);
         // mirror for north    
         for (i=1; i<=n; i++) 
           E_prev[0][i] = E_prev[2][i];
@@ -268,10 +269,10 @@ int main (int argc, char** argv)
         // send and receive data from north, mirror for south
         
         // receive from north
-        MPI_Irecv(&myE_prev[0][0], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, reqs[0]);
+        MPI_Irecv(&myE_prev[0][0], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs[0]);
 
         // send to north
-        MPI_Isend(&myE_prev[1][0], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, reqs[1]);
+        MPI_Isend(&myE_prev[1][0], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs[1]);
         
         // mirror for south
         for (i=1; i<=n; i++) 
@@ -281,22 +282,22 @@ int main (int argc, char** argv)
         // send and receive data both from north and south
         
         // receive from north
-        MPI_Irecv(&myE_prev[0][0], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, reqs[0]);
+        MPI_Irecv(&myE_prev[0][0], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs[0]);
         // receive from south
-        MPI_Irecv(&myE_prev[myRowSize+1][0], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, reqs[1]);
+        MPI_Irecv(&myE_prev[myRowSize+1][0], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs[1]);
     
         // send to north
-        MPI_Isend(&myE_prev[1][0], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, reqs[2]);
+        MPI_Isend(&myE_prev[1][0], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs[2]);
         // send to south
-        MPI_Isend(&myE_prev[myRowSize][0], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, reqs[3]);
+        MPI_Isend(&myE_prev[myRowSize][0], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs[3]);
         
     }
     
     if (myrank == 0 || myrank == P -1){
-      MPI_Waitall(2, reqs_2, stats_2);    
+      MPI_Waitall(2, reqs_2, mpi_stats_2);    
     }
     else {
-      MPI_Waitall(4, reqs, stats);    
+      MPI_Waitall(4, reqs, mpi_stats);    
     }
 
     simulate(myE, myE_prev, myR, alpha, n, myRowSize, kk, dt, a, epsilon, M1, M2, b); 
@@ -304,12 +305,12 @@ int main (int argc, char** argv)
     //simulate(E, E_prev, R, alpha, n, m, kk, dt, a, epsilon, M1, M2, b); 
     
     //swap current E with previous E
-    double **tmp = E; E = E_prev; E_prev = tmp;
+    //double **tmp = E; E = E_prev; E_prev = tmp;
    
     double **tmp2 = myE; myE = myE_prev; myE_prev = tmp2; 
     if (plot_freq){
       // TODO: Gather data from all processes
-       
+      MPI_Gather(myE[1], n * (myRowSize), MPI_DOUBLE, E[0], n*n, MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
       
       if (myrank == 0){
         int k = (int)(t/plot_freq);
@@ -321,23 +322,27 @@ int main (int argc, char** argv)
   }//end of while loop
 
   // TODO: Gather data from all processes
-  double time_elapsed = getTime() - t0;
+  MPI_Gather(myE[1], n * (myRowSize), MPI_DOUBLE, E[0], n*n, MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+  if (myrank == 0)
+  {  
+    double time_elapsed = getTime() - t0;
 
-  double Gflops = (double)(niter * (1E-9 * n * n ) * 28.0) / time_elapsed ;
-  double BW = (double)(niter * 1E-9 * (n * n * sizeof(double) * 4.0  ))/time_elapsed;
+    double Gflops = (double)(niter * (1E-9 * n * n ) * 28.0) / time_elapsed ;
+    double BW = (double)(niter * 1E-9 * (n * n * sizeof(double) * 4.0  ))/time_elapsed;
 
-  cout << "Number of Iterations        : " << niter << endl;
-  cout << "Elapsed Time (sec)          : " << time_elapsed << endl;
-  cout << "Sustained Gflops Rate       : " << Gflops << endl; 
-  cout << "Sustained Bandwidth (GB/sec): " << BW << endl << endl; 
+    cout << "Number of Iterations        : " << niter << endl;
+    cout << "Elapsed Time (sec)          : " << time_elapsed << endl;
+    cout << "Sustained Gflops Rate       : " << Gflops << endl; 
+    cout << "Sustained Bandwidth (GB/sec): " << BW << endl << endl; 
 
-  double mx;
-  double l2norm = stats(E_prev,m,n,&mx);
-  cout << "Max: " << mx <<  " L2norm: "<< l2norm << endl;
+    double mx;
+    double l2norm = stats(E_prev,m,n,&mx);
+    cout << "Max: " << mx <<  " L2norm: "<< l2norm << endl;
 
-  if (plot_freq){
-    cout << "\n\nEnter any input to close the program and the plot..." << endl;
-    getchar();
+    if (plot_freq){
+      cout << "\n\nEnter any input to close the program and the plot..." << endl;
+      getchar();
+    }
   }
   
   free (E);
