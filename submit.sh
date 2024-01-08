@@ -12,7 +12,7 @@
 #SBATCH --cores-per-socket=16
 #SBATCH --partition=short
 #SBATCH --time=00:30:00
-#SBATCH --output=cardiacsim.out
+#SBATCH --output=output.out
 
 #SBATCH --qos=users
 #SBATCH --account=users
@@ -30,24 +30,24 @@ echo "==========================================================================
 echo "Running compiled binary..."
 
 #serial version
-lscpu
-echo "Serial version..."
-./cardiacsim -n 1024 -t 100
+#lscpu
+#echo "Serial version..."
+#./cardiacsim -n 1024 -t 100
 #parallel version
 echo "Parallel version with 1 process"
-mpirun -np 1 ./cardiacsim -n 1024 -t 100 -y 1
+mpirun -np 1 ./cardiacsim -n 1024 -t 200 -y 1
 
-echo "Parallel version with 2 processes"
-mpirun -np 2 ./cardiacsim -n 1024 -t 100 -y 2 -x 1
+#echo "Parallel version with 2 processes"
+#mpirun -np 2 ./cardiacsim -n 1024 -t 100 -y 2 -x 1
 
-echo "Parallel version with 4 processes"
-mpirun -np 4 ./cardiacsim -n 1024 -t 100 -y 4 -x 1
+#echo "Parallel version with 4 processes"
+#mpirun -np 4 ./cardiacsim -n 1024 -t 100 -y 4 -x 1
 
-echo "Parallel version with 8 processes"
-mpirun -np 8 ./cardiacsim -n 1024 -t 100 -y 8 -x 1
+#echo "Parallel version with 8 processes"
+#mpirun -np 8 ./cardiacsim -n 1024 -t 100 -y 8 -x 1
 
-echo "Parallel version with 16 processes"
-mpirun -np 16 ./cardiacsim -n 1024 -t 100 -y 16 -x 1
+#echo "Parallel version with 16 processes"
+#mpirun -np 16 ./cardiacsim -n 1024 -t 100 -y 16 -x 1
 
 
 #Different configuration of MPI+OpenMP
