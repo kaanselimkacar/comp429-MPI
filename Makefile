@@ -1,7 +1,7 @@
 include ./arch.gnu
 # OPTIMIZATION = -fast
 # OPTIMIZATION = -O3
-# DEBUG += -g
+DEBUG += -g
 
 
 app:		cardiacsim

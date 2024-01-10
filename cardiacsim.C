@@ -15,7 +15,7 @@
 #include <math.h>
 #include <sys/time.h>
 
-//TODO: include mpi.h
+// include mpi.h
 #include <mpi.h>
 using namespace std;
 
@@ -98,7 +98,7 @@ void simulate (double** E,  double** E_prev,double** R,
     for (j=1; j<=m; j++) 
       E_prev[j][n+1] = E_prev[j][n-1];
    
-    // TODO: fix this for MPI programming
+    // fix this for MPI programming
     
     /* 
     for (i=1; i<=n; i++) 
@@ -166,23 +166,28 @@ int main (int argc, char** argv)
   cmdLine( argc, argv, T, n,px, py, plot_freq, no_comm, num_threads);
   m = n;  
 
-  
+  //TODO: add support for when the process number does not divide n
+  // possible solution: add + 1 to myRowSize, and check for matrix size
+  // if rowIndex * myrank * (n+2) < n+2 * n+2
   MPI_Request reqs[4];
   MPI_Request reqs_2[2];
   MPI_Status mpi_stats[4];
   MPI_Status mpi_stats_2[2];
   // matrix size N*N
   // for part 1 each processor should work on N/P rows 
-  // TODO: add local variables myE, myE_prev, my_R
+  // add local variables myE, myE_prev, my_R
   double **myE, **myR, **myE_prev;
   // Allocation
   int myRowSize = m/P;
+  
+  /*******
   myE = alloc2D(myRowSize+2 , n+2); 
   myE_prev = alloc2D(myRowSize+2 , n+2); 
   myR = alloc2D(myRowSize+2 , n+2); 
 
   int i,j;
   // Initialization
+  // fix
   for (j=1; j<=myRowSize; j++)
     for (i=1; i<=n; i++)
       myE_prev[j][i] = myR[j][i] = 0;
@@ -194,7 +199,7 @@ int main (int argc, char** argv)
   for (j=myRowSize/2+1; j<=myRowSize; j++)
     for (i=1; i<=n; i++)
       myR[j][i] = 1.0;
-
+  *******/
 
   // Allocate contiguous memory for solution arrays
   // The computational box is defined on [1:m+1,1:n+1]
@@ -205,6 +210,7 @@ int main (int argc, char** argv)
   R = alloc2D(m+2,n+2);
   
   // Initialization
+  int i,j;
   for (j=1; j<=m; j++)
     for (i=1; i<=n; i++)
       E_prev[j][i] = R[j][i] = 0;
@@ -217,7 +223,9 @@ int main (int argc, char** argv)
     for (i=1; i<=n; i++)
       R[j][i] = 1.0;
   
-  
+  myE = &E[myRowSize * myrank];
+  myE_prev = &E_prev[myRowSize * myrank];
+  myR = &R[myRowSize * myrank];
   double dx = 1.0/n;
 
   // For time integration, these values shouldn't change 
@@ -249,7 +257,10 @@ int main (int argc, char** argv)
   // Integer timestep number
   int niter=0;
 
-  // if single process
+ //TODO: remove this
+ // if single process
+ // create temp pointers to free the memory later
+ /*
  double **tempE;    
  double **tempE_prev;    
  double **tempR;    
@@ -261,8 +272,7 @@ int main (int argc, char** argv)
     E_prev = myE_prev;
     R = myR;
   }
-  
-  cout << "myRowSize = " << myRowSize << " my n = " << n << endl;
+  */
   while (t<T) {
     t += dt;
     niter++;
@@ -337,21 +347,20 @@ int main (int argc, char** argv)
    
     double **tmp2 = myE; myE = myE_prev; myE_prev = tmp2; 
     if (plot_freq){
-      // TODO: Gather data from all processes
+      // Gather data from all processes
       if (P != 1){
         MPI_Gather(&myE[1][0], (n+2) * (myRowSize), MPI_DOUBLE, &E[1][0], n*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
-      }
-      if (myrank == 0 && P != 1){
         int k = (int)(t/plot_freq);
         if ((t - k * plot_freq) < dt){
-	        splot(E,t,niter,m+2,n+2);
+	      splot(E,t,niter,m+2,n+2);
         }
       }
-      else if (P == 1){
+      else{
         int k = (int)(t/plot_freq);
         if ((t - k * plot_freq) < dt){
-	        splot(myE,t,niter,m+2,n+2);
+	      splot(myE,t,niter,m+2,n+2);
         }
+        
       }
     }
   }//end of while loop
@@ -380,12 +389,11 @@ int main (int argc, char** argv)
       cout << "\n\nEnter any input to close the program and the plot..." << endl;
       getchar();
     }
-  }
-  
+  } 
   free (E);
   free (E_prev);
   free (R);
-  
+  /*
   if (P == 1){
     free (tempE);
     free (tempE_prev);
@@ -396,6 +404,7 @@ int main (int argc, char** argv)
     free (myE_prev);
     free (myR);
   }
+  */
   MPI_Finalize(); 
   return 0;
 }
