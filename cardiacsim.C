@@ -141,6 +141,7 @@ int main (int argc, char** argv)
    *   E_prev is the Excitation variable for the previous timestep,
    *      and is used in time integration
    */
+  MPI_Init(&argc, &argv);
   double **E, **R, **E_prev;
   
   // Various constants - these definitions shouldn't change
@@ -157,7 +158,6 @@ int main (int argc, char** argv)
   int tag1 = 1, tag2 = 2;
      
   /* Initializations */
-  MPI_Init(&argc, &argv);
   
   
   MPI_Comm_size(MPI_COMM_WORLD, &P);
@@ -209,6 +209,7 @@ int main (int argc, char** argv)
   E_prev = alloc2D(m+2,n+2);
   R = alloc2D(m+2,n+2);
   
+  // TODO: fix this for myE
   // Initialization
   int i,j;
   for (j=1; j<=m; j++)
@@ -223,7 +224,10 @@ int main (int argc, char** argv)
     for (i=1; i<=n; i++)
       R[j][i] = 1.0;
   
+  // TODO: allocate seperate space for myE
+  // and 
   myE = &E[myRowSize * myrank];
+  // myE[a][b]
   myE_prev = &E_prev[myRowSize * myrank];
   myR = &R[myRowSize * myrank];
   double dx = 1.0/n;
@@ -273,6 +277,7 @@ int main (int argc, char** argv)
     R = myR;
   }
   */
+  // myE -> E[0]
   while (t<T) {
     t += dt;
     niter++;
@@ -286,10 +291,10 @@ int main (int argc, char** argv)
         // send and receive data from south, mirror for north
         
         // receive from south
-        MPI_Irecv(&myE_prev[myRowSize+1][1], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs[0]);
+        MPI_Irecv(&myE_prev[myRowSize+1][1], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs_2[0]);
 
         // send to south
-        MPI_Isend(&myE_prev[myRowSize][1], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs[1]);
+        MPI_Isend(&myE_prev[myRowSize][1], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs_2[1]);
         // mirror for north    
         for (i=1; i<=n; i++) 
           myE_prev[0][i] = myE_prev[2][i];
@@ -298,10 +303,10 @@ int main (int argc, char** argv)
         // send and receive data from north, mirror for south
         
         // receive from north
-        MPI_Irecv(&myE_prev[0][1], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs[0]);
+        MPI_Irecv(&myE_prev[0][1], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs_2[0]);
 
         // send to north
-        MPI_Isend(&myE_prev[1][1], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs[1]);
+        MPI_Isend(&myE_prev[1][1], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs_2[1]);
         
         // mirror for south
         for (i=1; i<=n; i++) 
@@ -322,7 +327,7 @@ int main (int argc, char** argv)
         
     }
     
-    if ( (myrank == 0 || myrank == P -1) && P != 1){
+    if ( (myrank == 0 || myrank == (P -1) ) && P != 1){
       MPI_Waitall(2, reqs_2, mpi_stats_2);    
     }
     else if (P != 1) {
@@ -331,9 +336,11 @@ int main (int argc, char** argv)
    
     // for single process 
     if (P == 1){
+      // mirror for north
       for (i=1; i<=n; i++) 
         myE_prev[0][i] = myE_prev[2][i];
       // no need for a second loop, can combine loops
+      // mirror for south
       for (i=1; i<=n; i++) 
         myE_prev[m+1][i] = myE_prev[m-1][i];
     }
@@ -349,6 +356,7 @@ int main (int argc, char** argv)
     if (plot_freq){
       // Gather data from all processes
       if (P != 1){
+        // TODO: maybe problem
         MPI_Gather(&myE[1][0], (n+2) * (myRowSize), MPI_DOUBLE, &E[1][0], n*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
         int k = (int)(t/plot_freq);
         if ((t - k * plot_freq) < dt){
@@ -364,11 +372,13 @@ int main (int argc, char** argv)
       }
     }
   }//end of while loop
-
-  // TODO: Gather data from all processes
+  cout << "SELAM BEN myrank =  " << myrank << endl;
+  // TODO: ERRORRR
   if (P != 1){
-    MPI_Gather(&myE[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E[1][0], n*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+    MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], n*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
   }
+  
+  cout << "SELAM BEN BUMMM myrank =  " << myrank << endl;
   if (myrank == 0)
   {  
     double time_elapsed = getTime() - t0;
@@ -383,16 +393,26 @@ int main (int argc, char** argv)
 
     double mx;
     double l2norm = stats(E_prev,m,n,&mx);
+    //double l2norm = stats(E,m,n,&mx);
     cout << "Max: " << mx <<  " L2norm: "<< l2norm << endl;
 
     if (plot_freq){
       cout << "\n\nEnter any input to close the program and the plot..." << endl;
       getchar();
     }
-  } 
+  }
+  //cout << "myrank = " << myrank << " address of E = " << E << endl;
+  
+  if (myrank == 0)
+  {
+  cout << "free ezhel myrank = " << myrank << endl; 
   free (E);
+  cout << "free oldschool ezhel myrank = " << myrank << endl; 
   free (E_prev);
+  cout << "free rte myrank = " << myrank << endl; 
   free (R);
+  cout << "herkes free mk myrank = " << myrank << endl;
+  }
   /*
   if (P == 1){
     free (tempE);
