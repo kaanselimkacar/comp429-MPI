@@ -17,6 +17,8 @@
 
 // include mpi.h
 #include <mpi.h>
+// include openmp
+#include <omp.h>
 using namespace std;
 
 
@@ -91,13 +93,20 @@ void simulate (double** E,  double** E_prev,double** R,
      * on the boundary of the computational box
      * Using mirror boundaries
      */
-  
+    #pragma omp parallel 
+    {
+      #pragma omp for
+      for (j=1; j<=m; j++){ 
+        E_prev[j][0] = E_prev[j][2];
+        E_prev[j][n+1] = E_prev[j][n-1];
+    }
+    /*
     for (j=1; j<=m; j++) 
       E_prev[j][0] = E_prev[j][2];
     // no need for a second loop, can combine loops
     for (j=1; j<=m; j++) 
       E_prev[j][n+1] = E_prev[j][n-1];
-   
+    */
     // fix this for MPI programming
     
     /* 
@@ -109,26 +118,25 @@ void simulate (double** E,  double** E_prev,double** R,
     */
 
     // Solve for the excitation, the PDE
-    for (j=1; j<=m; j++){
-      for (i=1; i<=n; i++) {
-	    E[j][i] = E_prev[j][i]+alpha*(E_prev[j][i+1]+E_prev[j][i-1]-4*E_prev[j][i]+E_prev[j+1][i]+E_prev[j-1][i]);
+      for (j=1; j<=m; j++){
+        for (i=1; i<=n; i++) {
+	        E[j][i] = E_prev[j][i]+alpha*(E_prev[j][i+1]+E_prev[j][i-1]-4*E_prev[j][i]+E_prev[j+1][i]+E_prev[j-1][i]);
+        }
       }
-    }
     
-    /* 
-     * Solve the ODE, advancing excitation and recovery to the
-     *     next timtestep
-     */
-    for (j=1; j<=m; j++){
-      for (i=1; i<=n; i++)
-	    E[j][i] = E[j][i] -dt*(kk* E[j][i]*(E[j][i] - a)*(E[j][i]-1)+ E[j][i] *R[j][i]);
-    }
+      /* 
+      * Solve the ODE, advancing excitation and recovery to the
+      *     next timtestep
+      */
+      #pragma omp for collapse(2)  
+      for (j=1; j<=m; j++){
+        for (i=1; i<=n; i++){
+	        E[j][i] = E[j][i] -dt*(kk* E[j][i]*(E[j][i] - a)*(E[j][i]-1)+ E[j][i] *R[j][i]);
+	        R[j][i] = R[j][i] + dt*(epsilon+M1* R[j][i]/( E[j][i]+M2))*(-R[j][i]-kk* E[j][i]*(E[j][i]-b-1));
+        }
+      }
     
-    for (j=1; j<=m; j++){
-      for (i=1; i<=n; i++)
-	    R[j][i] = R[j][i] + dt*(epsilon+M1* R[j][i]/( E[j][i]+M2))*(-R[j][i]-kk* E[j][i]*(E[j][i]-b-1));
-    }
-    
+    } // end of omp parallel
 }
 
 // Main program
@@ -329,12 +337,11 @@ int main (int argc, char** argv)
     // for single process 
     if (P == 1){
       // mirror for north
-      for (i=1; i<=n; i++) 
+      #pragma omp parallel for 
+      for (i=1; i<=n; i++){ 
         myE_prev[0][i] = myE_prev[2][i];
-      // no need for a second loop, can combine loops
-      // mirror for south
-      for (i=1; i<=n; i++) 
         myE_prev[m+1][i] = myE_prev[m-1][i];
+      }
     }
 
     simulate(myE, myE_prev, myR, alpha, n, myRowSize, kk, dt, a, epsilon, M1, M2, b); 
@@ -348,7 +355,6 @@ int main (int argc, char** argv)
     if (plot_freq){
       // Gather data from all processes
       if (P != 1){
-        // TODO: maybe problem
         MPI_Gather(&myE[1][0], (n+2) * (myRowSize), MPI_DOUBLE, &E[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
         int k = (int)(t/plot_freq);
         if ((t - k * plot_freq) < dt){
@@ -362,9 +368,9 @@ int main (int argc, char** argv)
         }
         
       }
+    MPI_Barrier(MPI_COMM_WORLD);
     }
   }//end of while loop
-  // TODO: ERRORRR
   if (P != 1){
     MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
   }
@@ -382,7 +388,13 @@ int main (int argc, char** argv)
     cout << "Sustained Bandwidth (GB/sec): " << BW << endl << endl; 
 
     double mx;
-    double l2norm = stats(E_prev,m,n,&mx);
+    double l2norm;
+    if (P == 1){
+        l2norm = stats(myE_prev,m,n,&mx);
+    }
+    else{
+        l2norm = stats(E_prev,m,n,&mx);
+    }
     //double l2norm = stats(E,m,n,&mx);
     cout << "Max: " << mx <<  " L2norm: "<< l2norm << endl;
 
