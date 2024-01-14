@@ -201,7 +201,6 @@ int main (int argc, char** argv)
   double *tempE_prev = &E_prev[0][0];
   double *tempR = &R[0][0];
  
-  // TODO: fix this for myE
   // Initialization
   int i,j;
   for (j=1; j<=m; j++)
@@ -216,8 +215,6 @@ int main (int argc, char** argv)
     for (i=1; i<=n; i++)
       R[j][i] = 1.0;
   
-  // TODO: allocate seperate space for myE
-  // and 
   // Allocation
   int myRowSize = m/P;
   
@@ -282,7 +279,6 @@ int main (int argc, char** argv)
     t += dt;
     niter++;
     
-    //TODO: add communication
     // send north -- tag1
     // send south -- tag2
     // receive north -- tag2
@@ -348,8 +344,6 @@ int main (int argc, char** argv)
     
     //simulate(E, E_prev, R, alpha, n, m, kk, dt, a, epsilon, M1, M2, b); 
     
-    //swap current E with previous E
-    //double **tmp = E; E = E_prev; E_prev = tmp;
    
     double **tmp2 = myE; myE = myE_prev; myE_prev = tmp2; 
     if (plot_freq){
