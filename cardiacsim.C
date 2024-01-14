@@ -177,29 +177,8 @@ int main (int argc, char** argv)
   // for part 1 each processor should work on N/P rows 
   // add local variables myE, myE_prev, my_R
   double **myE, **myR, **myE_prev;
-  // Allocation
-  int myRowSize = m/P;
   
-  /*******
-  myE = alloc2D(myRowSize+2 , n+2); 
-  myE_prev = alloc2D(myRowSize+2 , n+2); 
-  myR = alloc2D(myRowSize+2 , n+2); 
 
-  int i,j;
-  // Initialization
-  // fix
-  for (j=1; j<=myRowSize; j++)
-    for (i=1; i<=n; i++)
-      myE_prev[j][i] = myR[j][i] = 0;
-  
-  for (j=1; j<=myRowSize; j++)
-    for (i=n/2+1; i<=n; i++)
-      myE_prev[j][i] = 1.0;
-  
-  for (j=myRowSize/2+1; j<=myRowSize; j++)
-    for (i=1; i<=n; i++)
-      myR[j][i] = 1.0;
-  *******/
 
   // Allocate contiguous memory for solution arrays
   // The computational box is defined on [1:m+1,1:n+1]
@@ -208,7 +187,12 @@ int main (int argc, char** argv)
   E = alloc2D(m+2,n+2);
   E_prev = alloc2D(m+2,n+2);
   R = alloc2D(m+2,n+2);
-  
+ 
+  // create temp variables to free them later
+  double *tempE = &E[0][0];
+  double *tempE_prev = &E_prev[0][0];
+  double *tempR = &R[0][0];
+ 
   // TODO: fix this for myE
   // Initialization
   int i,j;
@@ -226,10 +210,35 @@ int main (int argc, char** argv)
   
   // TODO: allocate seperate space for myE
   // and 
-  myE = &E[myRowSize * myrank];
-  // myE[a][b]
-  myE_prev = &E_prev[myRowSize * myrank];
-  myR = &R[myRowSize * myrank];
+  // Allocation
+  int myRowSize = m/P;
+  
+  myE = alloc2D(myRowSize+2 , n+2); 
+  myE_prev = alloc2D(myRowSize+2 , n+2); 
+  myR = alloc2D(myRowSize+2 , n+2); 
+  
+  /* 6* 6, lets say P = 3, then myrank e {0,1,2}, myRowSize = 2
+ *  for 0 it should be j*1 + 0   j + myrank * myRowSize
+ *  for 1 it should be j*1 + 2
+ *  for 2 it should be j*1 + 4 
+  12345678 
+  12345678 -- 0
+  12345678 -- 0
+  12345678 -- 1
+  12345678 -- 1
+  12345678 -- 2
+  12345678 -- 2
+  12345678
+  */
+  // Initialization
+  for (j=1; j<=myRowSize; j++)
+    for (i=1; i<=n; i++)
+      myE_prev[j][i] = E_prev[myrank * myRowSize + j][i];
+  
+  for (j=1; j<=myRowSize; j++)
+    for (i=1; i<=n; i++)
+      myR[j][i] = R[myrank * myRowSize + j][i];
+
   double dx = 1.0/n;
 
   // For time integration, these values shouldn't change 
@@ -261,23 +270,6 @@ int main (int argc, char** argv)
   // Integer timestep number
   int niter=0;
 
- //TODO: remove this
- // if single process
- // create temp pointers to free the memory later
- /*
- double **tempE;    
- double **tempE_prev;    
- double **tempR;    
- if (P == 1){
-    tempE = E;
-    tempE_prev = E_prev;
-    tempR = R;
-    E = myE;
-    E_prev = myE_prev;
-    R = myR;
-  }
-  */
-  // myE -> E[0]
   while (t<T) {
     t += dt;
     niter++;
@@ -357,7 +349,7 @@ int main (int argc, char** argv)
       // Gather data from all processes
       if (P != 1){
         // TODO: maybe problem
-        MPI_Gather(&myE[1][0], (n+2) * (myRowSize), MPI_DOUBLE, &E[1][0], n*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+        MPI_Gather(&myE[1][0], (n+2) * (myRowSize), MPI_DOUBLE, &E[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
         int k = (int)(t/plot_freq);
         if ((t - k * plot_freq) < dt){
 	      splot(E,t,niter,m+2,n+2);
@@ -372,13 +364,11 @@ int main (int argc, char** argv)
       }
     }
   }//end of while loop
-  cout << "SELAM BEN myrank =  " << myrank << endl;
   // TODO: ERRORRR
   if (P != 1){
-    MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], n*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+    MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
   }
   
-  cout << "SELAM BEN BUMMM myrank =  " << myrank << endl;
   if (myrank == 0)
   {  
     double time_elapsed = getTime() - t0;
@@ -403,28 +393,15 @@ int main (int argc, char** argv)
   }
   //cout << "myrank = " << myrank << " address of E = " << E << endl;
   
-  if (myrank == 0)
-  {
-  cout << "free ezhel myrank = " << myrank << endl; 
+  free(myE); 
+  free(myE_prev); 
+  free(myR);
+  
+
   free (E);
-  cout << "free oldschool ezhel myrank = " << myrank << endl; 
   free (E_prev);
-  cout << "free rte myrank = " << myrank << endl; 
   free (R);
-  cout << "herkes free mk myrank = " << myrank << endl;
-  }
-  /*
-  if (P == 1){
-    free (tempE);
-    free (tempE_prev);
-    free (tempR);
-  }
-  else{
-    free (myE);
-    free (myE_prev);
-    free (myR);
-  }
-  */
+   
   MPI_Finalize(); 
   return 0;
 }
