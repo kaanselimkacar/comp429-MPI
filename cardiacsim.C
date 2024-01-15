@@ -134,7 +134,6 @@ void simulate (double** E,  double** E_prev,double** R,
         }
       }
     
-    } // end of omp parallel
 }
 
 // Main program
