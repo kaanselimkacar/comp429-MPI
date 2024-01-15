@@ -93,12 +93,10 @@ void simulate (double** E,  double** E_prev,double** R,
      * on the boundary of the computational box
      * Using mirror boundaries
      */
-    #pragma omp parallel 
-    {
-      #pragma omp for
-      for (j=1; j<=m; j++){ 
-        E_prev[j][0] = E_prev[j][2];
-        E_prev[j][n+1] = E_prev[j][n-1];
+    #pragma omp parallel for
+    for (j=1; j<=m; j++){ 
+      E_prev[j][0] = E_prev[j][2];
+      E_prev[j][n+1] = E_prev[j][n-1];
     }
     /*
     for (j=1; j<=m; j++) 
@@ -118,9 +116,9 @@ void simulate (double** E,  double** E_prev,double** R,
     */
 
     // Solve for the excitation, the PDE
-      for (j=1; j<=m; j++){
-        for (i=1; i<=n; i++) {
-	        E[j][i] = E_prev[j][i]+alpha*(E_prev[j][i+1]+E_prev[j][i-1]-4*E_prev[j][i]+E_prev[j+1][i]+E_prev[j-1][i]);
+    for (j=1; j<=m; j++){
+      for (i=1; i<=n; i++) {
+	     E[j][i] = E_prev[j][i]+alpha*(E_prev[j][i+1]+E_prev[j][i-1]-4*E_prev[j][i]+E_prev[j+1][i]+E_prev[j-1][i]);
         }
       }
     
@@ -128,7 +126,7 @@ void simulate (double** E,  double** E_prev,double** R,
       * Solve the ODE, advancing excitation and recovery to the
       *     next timtestep
       */
-      #pragma omp for collapse(2)  
+      #pragma omp parallel for collapse(2)  
       for (j=1; j<=m; j++){
         for (i=1; i<=n; i++){
 	        E[j][i] = E[j][i] -dt*(kk* E[j][i]*(E[j][i] - a)*(E[j][i]-1)+ E[j][i] *R[j][i]);
