@@ -214,6 +214,7 @@ int main (int argc, char** argv)
   
   // Allocation
   int myRowSize = m/P;
+  myRowSize = (m == P * myRowSize) ? myRowSize : (myRowSize + 1);  
   
   myE = alloc2D(myRowSize+2 , n+2); 
   myE_prev = alloc2D(myRowSize+2 , n+2); 
@@ -232,15 +233,34 @@ int main (int argc, char** argv)
   12345678 -- 2
   12345678
   */
-  // Initialization
-  for (j=1; j<=myRowSize; j++)
-    for (i=1; i<=n; i++)
-      myE_prev[j][i] = E_prev[myrank * myRowSize + j][i];
+  // Initialization of myE_prev and myR
   
-  for (j=1; j<=myRowSize; j++)
-    for (i=1; i<=n; i++)
-      myR[j][i] = R[myrank * myRowSize + j][i];
-
+  if (myrank == (P-1) && P != 1){
+    for (j=1; j<=myRowSize; j++){
+      if ((myrank * myRowSize + j) == (n+1))
+        break;
+      for (i=1; i<=n; i++){
+        myE_prev[j][i] = E_prev[myrank * myRowSize + j][i];
+      }
+    }
+    for (j=1; j<=myRowSize; j++){
+      if ((myrank * myRowSize + j) == (n+1))
+        break;
+      for (i=1; i<=n; i++){
+        myR[j][i] = R[myrank * myRowSize + j][i];
+      }
+    }
+    myRowSize = j - 1;
+  }// end of if
+  else{
+    for (j=1; j<=myRowSize; j++)
+      for (i=1; i<=n; i++)
+        myE_prev[j][i] = E_prev[myrank * myRowSize + j][i];
+  
+    for (j=1; j<=myRowSize; j++)
+      for (i=1; i<=n; i++)
+        myR[j][i] = R[myrank * myRowSize + j][i];
+  }// end of else
   double dx = 1.0/n;
 
   // For time integration, these values shouldn't change 
