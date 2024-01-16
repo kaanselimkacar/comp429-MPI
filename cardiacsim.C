@@ -93,11 +93,13 @@ void simulate (double** E,  double** E_prev,double** R,
      * on the boundary of the computational box
      * Using mirror boundaries
      */
+    /*
     #pragma omp parallel for
     for (j=1; j<=m; j++){ 
       E_prev[j][0] = E_prev[j][2];
       E_prev[j][n+1] = E_prev[j][n-1];
     }
+    */
     /*
     for (j=1; j<=m; j++) 
       E_prev[j][0] = E_prev[j][2];
@@ -173,6 +175,17 @@ int main (int argc, char** argv)
   //TODO: add support for when the process number does not divide n
   // possible solution: add + 1 to myRowSize, and check for matrix size
   // if rowIndex * myrank * (n+2) < n+2 * n+2
+  MPI_Request reqs[8] = {MPI_REQUEST_NULL,
+                          MPI_REQUEST_NULL,
+                           MPI_REQUEST_NULL,
+                            MPI_REQUEST_NULL,
+                             MPI_REQUEST_NULL,
+                              MPI_REQUEST_NULL,
+                               MPI_REQUEST_NULL,
+                                MPI_REQUEST_NULL};  
+  MPI_Status mpi_stats[8];  
+
+  /** TODO: remove this
   MPI_Request reqs_4[8]; // 4 send/recvs
   MPI_Request reqs_3[6]; // 3 send/recvs
   MPI_Request reqs_2[4]; // 2 send/recvs
@@ -181,6 +194,7 @@ int main (int argc, char** argv)
   MPI_Status mpi_stats_3[6];
   MPI_Status mpi_stats_2[4];
   MPI_Status mpi_stats[2];
+  **/
   // matrix size N*N
   // for part 1 each processor should work on N/P rows 
   // add local variables myE, myE_prev, my_R
@@ -302,6 +316,16 @@ int main (int argc, char** argv)
   int niter=0;
   
   int tag1 = 1, tag2 = 2, tag3 = 3, tag4 = 4;
+  
+  double recvBuff[myColSize + 2];
+  double sendBuff[myColSize + 2];
+    
+  int usualRowSize = m / py;
+  usualRowSize = (py * usualRowSize == m) ? usualRowSize : (usualRowSize + 1);
+  int usualColSize = n / px;
+  usualColSize = (px * usualColSize == n) ? usualColSize : (usualColSize + 1);
+  int smallRowSize = m - (py-1) * usualRowSize;
+  int smallColSize = n - (px-1) * usualColSize;
   // TODO: fix for 2d
   while (t<T) {
     t += dt;
@@ -316,54 +340,103 @@ int main (int argc, char** argv)
     // send west     -- tag4
     // receive east  -- tag4
     // receive west  -- tag3
-    //
-    // possiblities
-    // 1- top left
-    // mirror north
-    // send/recv south
-    // send/recv east
-    // mirror west
-    // 2- top mid
-    // mirror north
-    // send/recv south
-    // send/recv east
-    // send/recv west
-    // 3- top right
-    // mirror north
-    // send/recv south
-    // mirror eat
-    // send/recv west
-    // 4- mid left
-    // send/recv north
-    // send/recv south
-    // send/recv east
-    // mirror west
-    // 5- mid mid
-    // send/recv north
-    // send/recv south
-    // send/recv east
-    // send/recv west
-    // 6- mid right
-    // send/recv north
-    // send/recv south
-    // mirror east
-    // send/recv west
-    // 7- bot left
-    // send/recv north
-    // mirror south
-    // send/recv east
-    // mirror west
-    // 8- bot mid
-    // send/recv north
-    // mirror south
-    // send/recv east
-    // send/recv west
-    // 9- bit right
-    // send/recv north
-    // mirror south
-    // mirror east
-    // send/recv west
+   
+    // ALLAH BU MILLETE BU KODU BI DAHA YAZDIRMASIN
+
+    if (myY > 0){
+      // send/recv north
+      
+      // receive from north
+      MPI_Irecv(&myE_prev[0][1], myColSize, MPI_DOUBLE, myrank - px, tag2, MPI_COMM_WORLD, &reqs[0]);
+
+      // send to north
+      MPI_Isend(&myE_prev[1][1], myColSize, MPI_DOUBLE, myrank - px, tag1, MPI_COMM_WORLD, &reqs[1]);
+    }
     
+    if (myY < (py - 1)){
+      // send/recv south
+      
+      // receive from south
+      MPI_Irecv(&myE_prev[myRowSize+1][1], myColSize, MPI_DOUBLE, myrank + px, tag1, MPI_COMM_WORLD, &reqs[2]);
+
+      // send to south
+      MPI_Isend(&myE_prev[myRowSize][1], myColSize, MPI_DOUBLE, myrank + px, tag2, MPI_COMM_WORLD, &reqs[3]);
+    }
+    
+    if (myX > 0){
+      // send/recv from west
+    
+      // TODO: implement
+      // recv from west
+      MPI_Irecv(&recvBuff[1], myColSize, MPI_DOUBLE, myrank - 1, tag3, MPI_COMM_WORLD, &reqs[4]);
+      // pack the message first
+      for (i = 1; i <= myColSize; i++)
+        sendBuff[i] = myE_prev[i][1];
+      // send to west
+      MPI_Isend(&sendBuff[1], myColSize, MPI_DOUBLE, myrank - 1, tag4, MPI_COMM_WORLD, &reqs[5]);
+    }
+    
+    if (myX < (px - 1)){
+      // send/recv from east
+    
+      // TODO: implement
+      // recv from east
+      MPI_Irecv(&recvBuff[1], myColSize, MPI_DOUBLE, myrank + 1, tag4, MPI_COMM_WORLD, &reqs[6]);
+      // pack the message first
+      for (i = 1; i <= myColSize; i++)
+        sendBuff[i] = myE_prev[i][myColSize];
+      // send to east
+      MPI_Isend(&sendBuff[1], myColSize, MPI_DOUBLE, myrank + 1, tag3, MPI_COMM_WORLD, &reqs[7]);
+    }
+
+    // mirror north ----- processes with myY = 0
+    // mirror south ----- processes with myY = py-1
+    // mirror east  ----- myX = px -1
+    // mirror west  ----- myX = 0
+    if (myY  == 0){
+      // mirror north
+      for (i = 1; i <= myColSize; i++)
+        myE_prev[0][i] = myE_prev[2][i];
+    }
+     
+    if (myY  == py - 1){
+      // mirror south
+      for (i = 1; i <= myColSize; i++)
+        myE_prev[myRowSize + 1][i] = myE_prev[myRowSize - 1][i];
+    }
+
+    if (myX  == 0){
+      // mirror east
+      for (i = 1; i <= myRowSize; i++)
+        myE_prev[i][0] = myE_prev[i][2];
+    }
+    
+    if (myX  == px - 1){
+      // mirror west
+      for (i = 1; i <= myRowSize; i++)
+        myE_prev[i][myColSize + 1] = myE_prev[i][myColSize - 1];
+    }
+   
+    // wait for Isends and Irecvs
+    for (i = 0; i < 8; i++){
+        if (reqs[i] == MPI_REQUEST_NULL)
+            continue;
+        MPI_Wait(&reqs[i], &mpi_stats[i]);
+    }
+
+    // unpack the messages
+    if (myX > 0){
+      // unpack message for west
+      for (i = 1; i <= myColSize; i++)
+        myE_prev[i][0] = recvBuff[i];
+    } 
+    if (myX < (px - 1)){
+      // unpack message for east
+      for (i = 1; i <= myColSize; i++)
+        myE_prev[i][myColSize+1] = recvBuff[i];
+    }
+ 
+    /******* 
     // for single process 
     if (P == 1){
       // mirror for north and south
@@ -419,19 +492,55 @@ int main (int argc, char** argv)
     else if (P != 1) {
       MPI_Waitall(4, reqs_2, mpi_stats_2);    
     }
-   
+    ********/
 
     simulate(myE, myE_prev, myR, alpha, n, myRowSize, kk, dt, a, epsilon, M1, M2, b); 
-    
-    //simulate(E, E_prev, R, alpha, n, m, kk, dt, a, epsilon, M1, M2, b); 
-    
    
     double **tmp2 = myE; myE = myE_prev; myE_prev = tmp2; 
     if (plot_freq){
       // Gather data from all processes
       if (P != 1){
         // TODO: fix for 2d
-        MPI_Gather(&myE[1][0], (n+2) * (myRowSize), MPI_DOUBLE, &E[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+        //MPI_Gather(&myE[1][0], (n+2) * (myRowSize), MPI_DOUBLE, &E[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+        
+        // idea: gather row by row
+        // need to be carefull because when myY == py -1 myRowSize will be smaller than other processes
+        // also when myX == px - 1 myColSize will be smaller than other processes
+        
+        // copy the data of rank 0 to E
+        if (myrank == 0){
+          for (i = 1; i <= myRowSize; i++){
+            for(j = 1; j <= myColSize; j++){
+              E[i][j] = myE[i][j];
+            }
+          }
+        }
+        int currentY = -1;
+        for (i = 1; i <= m; i++){
+          if (( (i - 1) % usualRowSize) == 0){
+            currentY++;
+          }
+          if (myrank == 0){
+            // receive the messages
+            for (j = 1; j <= px; j++){
+              if (j == 1 && currentY == 0)
+                continue;
+              if (j == (px -1))
+                MPI_Recv(&E[i][usualColSize * (j-1) + 1], smallColSize, MPI_DOUBLE, currentY + j - 1, j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+              else
+                MPI_Recv(&E[i][usualColSize * (j-1) + 1], usualColSize, MPI_DOUBLE, currentY + j - 1, j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            }
+          }
+          else if (myY == currentY){
+            // send a single row of data 
+            for (j = 1; j <= px; j++){
+              if (j == 1 && currentY == 0)
+                continue;
+              MPI_Send(&myE[i][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
+            }
+          }
+        } // end of for
+        
         int k = (int)(t/plot_freq);
         if ((t - k * plot_freq) < dt){
 	      splot(E,t,niter,m+2,n+2);
@@ -449,7 +558,40 @@ int main (int argc, char** argv)
   }//end of while loop
   // TODO: fix for 2d
   if (P != 1){
-    MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+    //MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+    // copy the data of rank 0 to E
+    if (myrank == 0){
+      for (i = 1; i <= myRowSize; i++){
+        for(j = 1; j <= myColSize; j++){
+          E_prev[i][j] = myE_prev[i][j];
+        }
+      }
+    }
+    int currentY = -1;
+    for (i = 1; i <= m; i++){
+      if (( (i - 1) % usualRowSize) == 0){
+        currentY++;
+       }
+       if (myrank == 0){
+       // receive the messages
+         for (j = 1; j <= px; j++){
+           if (j == 1 && currentY == 0)
+             continue;
+           if (j == (px -1))
+             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], smallColSize, MPI_DOUBLE, currentY + j - 1, j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+           else
+             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], usualColSize, MPI_DOUBLE, currentY + j - 1, j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+          }
+        }
+        else if (myY == currentY){
+          // send a single row of data 
+          for (j = 1; j <= px; j++){
+            if (j == 1 && currentY == 0)
+              continue;
+            MPI_Send(&myE_prev[i][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
+          }
+        }
+      } // end of for
   }
   
   if (myrank == 0)
