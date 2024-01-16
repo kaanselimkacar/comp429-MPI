@@ -536,7 +536,8 @@ int main (int argc, char** argv)
             for (j = 1; j <= px; j++){
               if (j == 1 && currentY == 0)
                 continue;
-              MPI_Send(&myE[i][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
+              if (myrank == (currentY + j - 1))
+                MPI_Send(&myE[i][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
             }
           }
         } // end of for
@@ -588,7 +589,8 @@ int main (int argc, char** argv)
           for (j = 1; j <= px; j++){
             if (j == 1 && currentY == 0)
               continue;
-            MPI_Send(&myE_prev[i][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
+            if (myrank == (currentY + j - 1))
+              MPI_Send(&myE_prev[i][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
           }
         }
       } // end of for
