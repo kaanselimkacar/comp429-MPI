@@ -160,7 +160,6 @@ int main (int argc, char** argv)
   int num_threads=1; 
   
   int P = 1, myrank = 0; 
-  int tag1 = 1, tag2 = 2;
      
   /* Initializations */
   
@@ -174,10 +173,14 @@ int main (int argc, char** argv)
   //TODO: add support for when the process number does not divide n
   // possible solution: add + 1 to myRowSize, and check for matrix size
   // if rowIndex * myrank * (n+2) < n+2 * n+2
-  MPI_Request reqs[4];
-  MPI_Request reqs_2[2];
-  MPI_Status mpi_stats[4];
-  MPI_Status mpi_stats_2[2];
+  MPI_Request reqs_4[8]; // 4 send/recvs
+  MPI_Request reqs_3[6]; // 3 send/recvs
+  MPI_Request reqs_2[4]; // 2 send/recvs
+  MPI_Request reqs[2]; // 1 send/recv's
+  MPI_Status mpi_stats_4[8];
+  MPI_Status mpi_stats_3[6];
+  MPI_Status mpi_stats_2[4];
+  MPI_Status mpi_stats[2];
   // matrix size N*N
   // for part 1 each processor should work on N/P rows 
   // add local variables myE, myE_prev, my_R
@@ -213,9 +216,11 @@ int main (int argc, char** argv)
       R[j][i] = 1.0;
   
   // Allocation
-  int myRowSize = m/P;
-  myRowSize = (m == P * myRowSize) ? myRowSize : (myRowSize + 1);  
-  
+  int myRowSize = m / py;
+  myRowSize = (m == py * myRowSize) ? myRowSize : (myRowSize + 1);  
+  int myColSize = n / px;
+  myRowSize = (n == px * myRowSize) ? myRowSize : (myRowSize + 1);  
+     
   myE = alloc2D(myRowSize+2 , n+2); 
   myE_prev = alloc2D(myRowSize+2 , n+2); 
   myR = alloc2D(myRowSize+2 , n+2); 
@@ -235,32 +240,36 @@ int main (int argc, char** argv)
   */
   // Initialization of myE_prev and myR
   
-  if (myrank == (P-1) && P != 1){
-    for (j=1; j<=myRowSize; j++){
-      if ((myrank * myRowSize + j) == (n+1))
-        break;
-      for (i=1; i<=n; i++){
-        myE_prev[j][i] = E_prev[myrank * myRowSize + j][i];
-      }
+  // calculate myX and myY
+  // myX = rank in terms of row
+  // myY = rank in terms of col
+  int myX = myrank % px;
+  int myY = myrank / px;
+  // lets say P = 8
+  // py = 4, px = 2, means
+  // rank0(myY = 0, myX = 0)     rank1(myY = 0, myX = 1)
+  // rank2(myY = 1, myX = 0)     rank3(myY = 1, myX = 1)
+  // rank4(myY = 2, myX = 0)     rank5(myY = 2, myX = 1)
+  // rank6(myY = 3, myX = 0)     rank7(myY = 3, myX = 1)
+
+  // works for 1d!
+  for (j=1; j<=myRowSize; j++){
+      
+    // if condition for when process geometry doesnt evenly divide the matrix
+    if ((myY * myRowSize + j) == (m+1)){
+      myRowSize = j-1;
+      break;
     }
-    for (j=1; j<=myRowSize; j++){
-      if ((myrank * myRowSize + j) == (n+1))
-        break;
-      for (i=1; i<=n; i++){
-        myR[j][i] = R[myrank * myRowSize + j][i];
+    for (i=1; i<=myColSize; i++){
+      // if condition for when process geometry doesnt evenly divide the matrix
+      if ((myX * myColSize + i) == (n+1)){
+          myColSize = i-1;
+          break;
       }
+      myE_prev[j][i] = E_prev[myY * myRowSize + j][myX * myColSize + i];
+      myR[j][i]      =      R[myY * myRowSize + j][myX * myColSize + i];
     }
-    myRowSize = j - 1;
-  }// end of if
-  else{
-    for (j=1; j<=myRowSize; j++)
-      for (i=1; i<=n; i++)
-        myE_prev[j][i] = E_prev[myrank * myRowSize + j][i];
-  
-    for (j=1; j<=myRowSize; j++)
-      for (i=1; i<=n; i++)
-        myR[j][i] = R[myrank * myRowSize + j][i];
-  }// end of else
+  }
   double dx = 1.0/n;
 
   // For time integration, these values shouldn't change 
@@ -272,7 +281,7 @@ int main (int argc, char** argv)
 
   if (myrank == 0)
   {
-    cout << "Num Processes   : " << P << endl;
+    //cout << "Num Processes   : " << P << endl;
     cout << "Grid Size       : " << n << endl; 
     cout << "Duration of Sim : " << T << endl; 
     cout << "Time step dt    : " << dt << endl; 
@@ -291,71 +300,126 @@ int main (int argc, char** argv)
   double t = 0.0;
   // Integer timestep number
   int niter=0;
-
+  
+  int tag1 = 1, tag2 = 2, tag3 = 3, tag4 = 4;
+  // TODO: fix for 2d
   while (t<T) {
     t += dt;
     niter++;
     
-    // send north -- tag1
-    // send south -- tag2
+    // send north    -- tag1
+    // send south    -- tag2
     // receive north -- tag2
     // receive south -- tag1
-    if (myrank == 0 && P != 1){
-        // send and receive data from south, mirror for north
-        
-        // receive from south
-        MPI_Irecv(&myE_prev[myRowSize+1][1], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs_2[0]);
-
-        // send to south
-        MPI_Isend(&myE_prev[myRowSize][1], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs_2[1]);
-        // mirror for north    
-        for (i=1; i<=n; i++) 
-          myE_prev[0][i] = myE_prev[2][i];
-    }
-    else if (myrank == P-1 && P != 1){
-        // send and receive data from north, mirror for south
-        
-        // receive from north
-        MPI_Irecv(&myE_prev[0][1], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs_2[0]);
-
-        // send to north
-        MPI_Isend(&myE_prev[1][1], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs_2[1]);
-        
-        // mirror for south
-        for (i=1; i<=n; i++) 
-          myE_prev[myRowSize+1][i] = myE_prev[myRowSize-1][i];
-    }
-    else if (P != 1){
-        // send and receive data both from north and south
-        
-        // receive from north
-        MPI_Irecv(&myE_prev[0][1], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs[0]);
-        // receive from south
-        MPI_Irecv(&myE_prev[myRowSize+1][1], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs[1]);
+    //
+    // send east     -- tag3
+    // send west     -- tag4
+    // receive east  -- tag4
+    // receive west  -- tag3
+    //
+    // possiblities
+    // 1- top left
+    // mirror north
+    // send/recv south
+    // send/recv east
+    // mirror west
+    // 2- top mid
+    // mirror north
+    // send/recv south
+    // send/recv east
+    // send/recv west
+    // 3- top right
+    // mirror north
+    // send/recv south
+    // mirror eat
+    // send/recv west
+    // 4- mid left
+    // send/recv north
+    // send/recv south
+    // send/recv east
+    // mirror west
+    // 5- mid mid
+    // send/recv north
+    // send/recv south
+    // send/recv east
+    // send/recv west
+    // 6- mid right
+    // send/recv north
+    // send/recv south
+    // mirror east
+    // send/recv west
+    // 7- bot left
+    // send/recv north
+    // mirror south
+    // send/recv east
+    // mirror west
+    // 8- bot mid
+    // send/recv north
+    // mirror south
+    // send/recv east
+    // send/recv west
+    // 9- bit right
+    // send/recv north
+    // mirror south
+    // mirror east
+    // send/recv west
     
-        // send to north
-        MPI_Isend(&myE_prev[1][1], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs[2]);
-        // send to south
-        MPI_Isend(&myE_prev[myRowSize][1], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs[3]);
-        
-    }
-    
-    if ( (myrank == 0 || myrank == (P -1) ) && P != 1){
-      MPI_Waitall(2, reqs_2, mpi_stats_2);    
-    }
-    else if (P != 1) {
-      MPI_Waitall(4, reqs, mpi_stats);    
-    }
-   
     // for single process 
     if (P == 1){
-      // mirror for north
+      // mirror for north and south
       #pragma omp parallel for 
       for (i=1; i<=n; i++){ 
         myE_prev[0][i] = myE_prev[2][i];
         myE_prev[m+1][i] = myE_prev[m-1][i];
       }
     }
+    else if (myrank == 0){
+        // send and receive data from south, mirror for north
+        
+        // receive from south
+        MPI_Irecv(&myE_prev[myRowSize+1][1], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs[0]);
+
+        // send to south
+        MPI_Isend(&myE_prev[myRowSize][1], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs[1]);
+        // mirror for north    
+        for (i=1; i<=n; i++) 
+          myE_prev[0][i] = myE_prev[2][i];
+    }
+    else if (myrank == P-1){
+        // send and receive data from north, mirror for south
+        
+        // receive from north
+        MPI_Irecv(&myE_prev[0][1], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs[0]);
+
+        // send to north
+        MPI_Isend(&myE_prev[1][1], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs[1]);
+        
+        // mirror for south
+        for (i=1; i<=n; i++) 
+          myE_prev[myRowSize+1][i] = myE_prev[myRowSize-1][i];
+    }
+    else{
+        // send and receive data both from north and south
+        
+        // receive from north
+        MPI_Irecv(&myE_prev[0][1], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs_2[0]);
+        // receive from south
+        MPI_Irecv(&myE_prev[myRowSize+1][1], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs_2[1]);
+    
+        // send to north
+        MPI_Isend(&myE_prev[1][1], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs_2[2]);
+        // send to south
+        MPI_Isend(&myE_prev[myRowSize][1], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs_2[3]);
+        
+    }
+    
+    if ( (myrank == 0 || myrank == (P -1) ) && P != 1){
+      MPI_Waitall(2, reqs, mpi_stats);    
+    }
+    else if (P != 1) {
+      MPI_Waitall(4, reqs_2, mpi_stats_2);    
+    }
+   
 
     simulate(myE, myE_prev, myR, alpha, n, myRowSize, kk, dt, a, epsilon, M1, M2, b); 
     
@@ -366,6 +430,7 @@ int main (int argc, char** argv)
     if (plot_freq){
       // Gather data from all processes
       if (P != 1){
+        // TODO: fix for 2d
         MPI_Gather(&myE[1][0], (n+2) * (myRowSize), MPI_DOUBLE, &E[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
         int k = (int)(t/plot_freq);
         if ((t - k * plot_freq) < dt){
@@ -382,6 +447,7 @@ int main (int argc, char** argv)
     MPI_Barrier(MPI_COMM_WORLD);
     }
   }//end of while loop
+  // TODO: fix for 2d
   if (P != 1){
     MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
   }
