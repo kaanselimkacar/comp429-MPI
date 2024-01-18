@@ -461,6 +461,7 @@ int main (int argc, char** argv)
         }
         int currentY = -1;
         for (i = 1; i <= m; i++){
+          int myIndex = (i % myRowSize == 0) ? myRowSize : i % myRowSize; // myIndex ranges from 1 ,2 , ... , myRowSize
           if (( (i - 1) % usualRowSize) == 0){
             currentY++;
           }
@@ -481,7 +482,7 @@ int main (int argc, char** argv)
               if (j == 1 && currentY == 0)
                 continue;
               if (myrank == (currentY + j - 1))
-                MPI_Send(&myE[i][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
+                MPI_Send(&myE[myIndex][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
             }
           }
         } // end of for
