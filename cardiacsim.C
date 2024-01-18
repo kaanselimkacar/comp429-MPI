@@ -327,7 +327,7 @@ int main (int argc, char** argv)
   int smallRowSize = m - (py-1) * usualRowSize;
   int smallColSize = n - (px-1) * usualColSize;
   // TODO: fix for 2d
-  cout << "Still alive !!  myrank = " << myrank << endl;
+  //cout << "Still alive !!  myrank = " << myrank << endl;
   while (t<T) {
     t += dt;
     niter++;
@@ -501,7 +501,7 @@ int main (int argc, char** argv)
     MPI_Barrier(MPI_COMM_WORLD);
     }
   }//end of while loop
-  cout << "Still alive !! Still alive!!  myrank = " << myrank << endl;
+  //cout << "Still alive !! Still alive!!  myrank = " << myrank << endl;
   // TODO: fix for 2d
   if (P != 1){
     //MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
@@ -544,7 +544,7 @@ int main (int argc, char** argv)
       } // end of for
   }
   
-  cout << "Still alive !! Still alive!!  Still alive!! myrank = " << myrank << endl;
+  //cout << "Still alive !! Still alive!!  Still alive!! myrank = " << myrank << endl;
   if (myrank == 0)
   {  
     double time_elapsed = getTime() - t0;
