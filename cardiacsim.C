@@ -235,9 +235,9 @@ int main (int argc, char** argv)
   int myColSize = n / px;
   myRowSize = (n == px * myRowSize) ? myRowSize : (myRowSize + 1);  
      
-  myE = alloc2D(myRowSize+2 , n+2); 
-  myE_prev = alloc2D(myRowSize+2 , n+2); 
-  myR = alloc2D(myRowSize+2 , n+2); 
+  myE = alloc2D(myRowSize+2 , myColSize+2); 
+  myE_prev = alloc2D(myRowSize+2 , myColSize+2); 
+  myR = alloc2D(myRowSize+2 , myColSize+2); 
   
   /* 6* 6, lets say P = 3, then myrank e {0,1,2}, myRowSize = 2
  *  for 0 it should be j*1 + 0   j + myrank * myRowSize
@@ -327,6 +327,7 @@ int main (int argc, char** argv)
   int smallRowSize = m - (py-1) * usualRowSize;
   int smallColSize = n - (px-1) * usualColSize;
   // TODO: fix for 2d
+  cout << "Still alive !!  myrank = " << myrank << endl;
   while (t<T) {
     t += dt;
     niter++;
@@ -427,74 +428,17 @@ int main (int argc, char** argv)
     // unpack the messages
     if (myX > 0){
       // unpack message for west
-      for (i = 1; i <= myColSize; i++)
+      for (i = 1; i <= myRowSize; i++)
         myE_prev[i][0] = recvBuff[i];
     } 
     if (myX < (px - 1)){
       // unpack message for east
-      for (i = 1; i <= myColSize; i++)
+      for (i = 1; i <= myRowSize; i++)
         myE_prev[i][myColSize+1] = recvBuff[i];
     }
  
-    /******* 
-    // for single process 
-    if (P == 1){
-      // mirror for north and south
-      #pragma omp parallel for 
-      for (i=1; i<=n; i++){ 
-        myE_prev[0][i] = myE_prev[2][i];
-        myE_prev[m+1][i] = myE_prev[m-1][i];
-      }
-    }
-    else if (myrank == 0){
-        // send and receive data from south, mirror for north
-        
-        // receive from south
-        MPI_Irecv(&myE_prev[myRowSize+1][1], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs[0]);
 
-        // send to south
-        MPI_Isend(&myE_prev[myRowSize][1], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs[1]);
-        // mirror for north    
-        for (i=1; i<=n; i++) 
-          myE_prev[0][i] = myE_prev[2][i];
-    }
-    else if (myrank == P-1){
-        // send and receive data from north, mirror for south
-        
-        // receive from north
-        MPI_Irecv(&myE_prev[0][1], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs[0]);
-
-        // send to north
-        MPI_Isend(&myE_prev[1][1], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs[1]);
-        
-        // mirror for south
-        for (i=1; i<=n; i++) 
-          myE_prev[myRowSize+1][i] = myE_prev[myRowSize-1][i];
-    }
-    else{
-        // send and receive data both from north and south
-        
-        // receive from north
-        MPI_Irecv(&myE_prev[0][1], n, MPI_DOUBLE, myrank-1, tag2, MPI_COMM_WORLD, &reqs_2[0]);
-        // receive from south
-        MPI_Irecv(&myE_prev[myRowSize+1][1], n, MPI_DOUBLE, myrank+1, tag1, MPI_COMM_WORLD, &reqs_2[1]);
-    
-        // send to north
-        MPI_Isend(&myE_prev[1][1], n, MPI_DOUBLE, myrank-1, tag1, MPI_COMM_WORLD, &reqs_2[2]);
-        // send to south
-        MPI_Isend(&myE_prev[myRowSize][1], n, MPI_DOUBLE, myrank+1, tag2, MPI_COMM_WORLD, &reqs_2[3]);
-        
-    }
-    
-    if ( (myrank == 0 || myrank == (P -1) ) && P != 1){
-      MPI_Waitall(2, reqs, mpi_stats);    
-    }
-    else if (P != 1) {
-      MPI_Waitall(4, reqs_2, mpi_stats_2);    
-    }
-    ********/
-
-    simulate(myE, myE_prev, myR, alpha, n, myRowSize, kk, dt, a, epsilon, M1, M2, b); 
+    simulate(myE, myE_prev, myR, alpha, myColSize, myRowSize, kk, dt, a, epsilon, M1, M2, b); 
    
     double **tmp2 = myE; myE = myE_prev; myE_prev = tmp2; 
     if (plot_freq){
@@ -557,6 +501,7 @@ int main (int argc, char** argv)
     MPI_Barrier(MPI_COMM_WORLD);
     }
   }//end of while loop
+  cout << "Still alive !! Still alive!!  myrank = " << myrank << endl;
   // TODO: fix for 2d
   if (P != 1){
     //MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
@@ -573,6 +518,7 @@ int main (int argc, char** argv)
       if (( (i - 1) % usualRowSize) == 0){
         currentY++;
        }
+       int myIndex = (i % myRowSize == 0) ? myRowSize : i % myRowSize; // myIndex ranges from 1 ,2 , ... , myRowSize
        if (myrank == 0){
        // receive the messages
          for (j = 1; j <= px; j++){
@@ -589,13 +535,16 @@ int main (int argc, char** argv)
           for (j = 1; j <= px; j++){
             if (j == 1 && currentY == 0)
               continue;
+            // TODO: fix index i
+            // maybe i % usualRowSize
             if (myrank == (currentY + j - 1))
-              MPI_Send(&myE_prev[i][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
+              MPI_Send(&myE_prev[myIndex][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
           }
         }
       } // end of for
   }
   
+  cout << "Still alive !! Still alive!!  Still alive!! myrank = " << myrank << endl;
   if (myrank == 0)
   {  
     double time_elapsed = getTime() - t0;
