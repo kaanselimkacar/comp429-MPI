@@ -185,16 +185,6 @@ int main (int argc, char** argv)
                                 MPI_REQUEST_NULL};  
   MPI_Status mpi_stats[8];  
 
-  /** TODO: remove this
-  MPI_Request reqs_4[8]; // 4 send/recvs
-  MPI_Request reqs_3[6]; // 3 send/recvs
-  MPI_Request reqs_2[4]; // 2 send/recvs
-  MPI_Request reqs[2]; // 1 send/recv's
-  MPI_Status mpi_stats_4[8];
-  MPI_Status mpi_stats_3[6];
-  MPI_Status mpi_stats_2[4];
-  MPI_Status mpi_stats[2];
-  **/
   // matrix size N*N
   // for part 1 each processor should work on N/P rows 
   // add local variables myE, myE_prev, my_R
@@ -206,9 +196,11 @@ int main (int argc, char** argv)
   // The computational box is defined on [1:m+1,1:n+1]
   // We pad the arrays in order to facilitate differencing on the 
   // boundaries of the computation box
+  //cout << "everyday I'm mallocing myrank = " << myrank << endl;
   E = alloc2D(m+2,n+2);
   E_prev = alloc2D(m+2,n+2);
   R = alloc2D(m+2,n+2);
+  //cout << "finished I'm mallocing myrank = " << myrank << endl;
  
   // create temp variables to free them later
   double *tempE = &E[0][0];
@@ -235,9 +227,11 @@ int main (int argc, char** argv)
   int myColSize = n / px;
   myRowSize = (n == px * myRowSize) ? myRowSize : (myRowSize + 1);  
      
+  //cout << "everyday I'm mallocing myrank = " << myrank << endl;
   myE = alloc2D(myRowSize+2 , myColSize+2); 
   myE_prev = alloc2D(myRowSize+2 , myColSize+2); 
   myR = alloc2D(myRowSize+2 , myColSize+2); 
+  //cout << "finished I'm mallocing myrank = " << myrank << endl;
   
   /* 6* 6, lets say P = 3, then myrank e {0,1,2}, myRowSize = 2
  *  for 0 it should be j*1 + 0   j + myrank * myRowSize
@@ -295,7 +289,7 @@ int main (int argc, char** argv)
 
   if (myrank == 0)
   {
-    //cout << "Num Processes   : " << P << endl;
+    cout << "Num Processes   : " << P << endl;
     cout << "Grid Size       : " << n << endl; 
     cout << "Duration of Sim : " << T << endl; 
     cout << "Time step dt    : " << dt << endl; 
@@ -305,6 +299,10 @@ int main (int argc, char** argv)
   
     cout << endl;
   }
+  
+  cout << "before barrier myrank = " << myrank << endl;
+  //MPI_Barrier(MPI_COMM_WORLD);
+  cout << "after barrier myrank = " << myrank << endl;
   // Start the timer
   double t0 = getTime();
   
@@ -316,9 +314,11 @@ int main (int argc, char** argv)
   int niter=0;
   
   int tag1 = 1, tag2 = 2, tag3 = 3, tag4 = 4;
-  
-  double recvBuff[myColSize + 2];
-  double sendBuff[myColSize + 2];
+  //cout << "everyday I'm mallocing myrank = " << myrank << endl;
+  double *recvBuff = (double *) malloc((sizeof(double) * (myRowSize + 2)));;
+  double *sendBuff = (double *) malloc((sizeof(double) * (myRowSize + 2)));;
+  //cout << "finished I'm mallocing myrank = " << myrank << endl;
+  //double sendBuff[myColSize + 2];
     
   int usualRowSize = m / py;
   usualRowSize = (py * usualRowSize == m) ? usualRowSize : (usualRowSize + 1);
@@ -327,7 +327,7 @@ int main (int argc, char** argv)
   int smallRowSize = m - (py-1) * usualRowSize;
   int smallColSize = n - (px-1) * usualColSize;
   // TODO: fix for 2d
-  //cout << "Still alive !!  myrank = " << myrank << endl;
+  cout << "Still alive !!  myrank = " << myrank << endl;
   while (t<T) {
     t += dt;
     niter++;
@@ -366,28 +366,29 @@ int main (int argc, char** argv)
     
     if (myX > 0){
       // send/recv from west
-    
+      //cout << "I shouldnt be here amk myrank = " << myrank << endl;  
       // TODO: implement
       // recv from west
-      MPI_Irecv(&recvBuff[1], myColSize, MPI_DOUBLE, myrank - 1, tag3, MPI_COMM_WORLD, &reqs[4]);
+      MPI_Irecv(&recvBuff[1], myRowSize, MPI_DOUBLE, myrank - 1, tag3, MPI_COMM_WORLD, &reqs[4]);
       // pack the message first
-      for (i = 1; i <= myColSize; i++)
+      for (i = 1; i <= myRowSize; i++)
         sendBuff[i] = myE_prev[i][1];
       // send to west
-      MPI_Isend(&sendBuff[1], myColSize, MPI_DOUBLE, myrank - 1, tag4, MPI_COMM_WORLD, &reqs[5]);
+      MPI_Isend(&sendBuff[1], myRowSize, MPI_DOUBLE, myrank - 1, tag4, MPI_COMM_WORLD, &reqs[5]);
     }
     
     if (myX < (px - 1)){
       // send/recv from east
+      //cout << "I shouldnt be here amk myrank = " << myrank << endl;  
     
       // TODO: implement
       // recv from east
-      MPI_Irecv(&recvBuff[1], myColSize, MPI_DOUBLE, myrank + 1, tag4, MPI_COMM_WORLD, &reqs[6]);
+      MPI_Irecv(&recvBuff[1], myRowSize, MPI_DOUBLE, myrank + 1, tag4, MPI_COMM_WORLD, &reqs[6]);
       // pack the message first
-      for (i = 1; i <= myColSize; i++)
+      for (i = 1; i <= myRowSize; i++)
         sendBuff[i] = myE_prev[i][myColSize];
       // send to east
-      MPI_Isend(&sendBuff[1], myColSize, MPI_DOUBLE, myrank + 1, tag3, MPI_COMM_WORLD, &reqs[7]);
+      MPI_Isend(&sendBuff[1], myRowSize, MPI_DOUBLE, myrank + 1, tag3, MPI_COMM_WORLD, &reqs[7]);
     }
 
     // mirror north ----- processes with myY = 0
@@ -418,12 +419,21 @@ int main (int argc, char** argv)
         myE_prev[i][myColSize + 1] = myE_prev[i][myColSize - 1];
     }
    
+    //cout << "Waiting! t = " << t << "  myrank = " << myrank << endl;
     // wait for Isends and Irecvs
     for (i = 0; i < 8; i++){
         if (reqs[i] == MPI_REQUEST_NULL)
             continue;
+       
+        //cout << "waiting! myrank = " << myrank << endl;
         MPI_Wait(&reqs[i], &mpi_stats[i]);
+        //cout << "waited! myrank = " << myrank << endl;
+        // debug
+        //int count;
+        //MPI_Get_count(&mpi_stats[i], MPI_INT, &count);
+        //cout << "myrank = " << myrank << "received " << count << "elements with mpi_tag = " << mpi_stats[i].MPI_TAG << endl; 
     }
+    //cout << "Waited! t = " << t << "  myrank = " << myrank << endl;
 
     // unpack the messages
     if (myX > 0){
@@ -437,7 +447,7 @@ int main (int argc, char** argv)
         myE_prev[i][myColSize+1] = recvBuff[i];
     }
  
-
+    //cout << "Simulating t = " << t << "  myrank = " << myrank << endl;
     simulate(myE, myE_prev, myR, alpha, myColSize, myRowSize, kk, dt, a, epsilon, M1, M2, b); 
    
     double **tmp2 = myE; myE = myE_prev; myE_prev = tmp2; 
@@ -502,7 +512,7 @@ int main (int argc, char** argv)
     MPI_Barrier(MPI_COMM_WORLD);
     }
   }//end of while loop
-  //cout << "Still alive !! Still alive!!  myrank = " << myrank << endl;
+  cout << "Still alive !! Still alive!!  myrank = " << myrank << endl;
   // TODO: fix for 2d
   if (P != 1){
     //MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
@@ -525,10 +535,10 @@ int main (int argc, char** argv)
          for (j = 1; j <= px; j++){
            if (j == 1 && currentY == 0)
              continue;
-           if (j == (px -1))
-             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], smallColSize, MPI_DOUBLE, currentY + j - 1, j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+           if (j == px)
+             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], smallColSize, MPI_DOUBLE, currentY * px + j - 1, currentY * px + j - 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
            else
-             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], usualColSize, MPI_DOUBLE, currentY + j - 1, j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], usualColSize, MPI_DOUBLE, currentY * px + j - 1, currentY * px + j - 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
           }
         }
         else if (myY == currentY){
@@ -538,14 +548,14 @@ int main (int argc, char** argv)
               continue;
             // TODO: fix index i
             // maybe i % usualRowSize
-            if (myrank == (currentY + j - 1))
-              MPI_Send(&myE_prev[myIndex][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
+            if (myrank == (currentY * px + j - 1))
+              MPI_Send(&myE_prev[myIndex][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, myrank, MPI_COMM_WORLD);
           }
         }
       } // end of for
-  }
+  } // end of if P != 1
   
-  //cout << "Still alive !! Still alive!!  Still alive!! myrank = " << myrank << endl;
+  cout << "Still alive !! Still alive!!  Still alive!! myrank = " << myrank << endl;
   if (myrank == 0)
   {  
     double time_elapsed = getTime() - t0;
@@ -574,8 +584,10 @@ int main (int argc, char** argv)
       getchar();
     }
   }
-  //cout << "myrank = " << myrank << " address of E = " << E << endl;
   
+  free(sendBuff);
+  free(recvBuff);     
+
   free(myE); 
   free(myE_prev); 
   free(myR);
