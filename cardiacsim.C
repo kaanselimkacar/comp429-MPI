@@ -222,11 +222,32 @@ int main (int argc, char** argv)
       R[j][i] = 1.0;
   
   // Allocation
-  int myRowSize = m / py;
-  myRowSize = (m == py * myRowSize) ? myRowSize : (myRowSize + 1);  
-  int myColSize = n / px;
-  myRowSize = (n == px * myRowSize) ? myRowSize : (myRowSize + 1);  
-     
+  int myX = myrank % px;
+  int myY = myrank / px;
+  
+
+  int usualRowSize = m / py;
+  usualRowSize = (py * usualRowSize == m) ? usualRowSize : (usualRowSize + 1);
+  int usualColSize = n / px;
+  usualColSize = (px * usualColSize == n) ? usualColSize : (usualColSize + 1);
+  int smallRowSize = m - (py-1) * usualRowSize;
+  int smallColSize = n - (px-1) * usualColSize;
+  //cout << "usualColSize = " << usualColSize << " usualRowSize = "<< usualRowSize << endl;  
+
+  int myRowSize = m, myColSize = n;
+  if (myY == (py - 1)){
+    myRowSize = smallRowSize; 
+  }  
+  else {
+    myRowSize = usualRowSize;
+  }
+   
+  if (myX == (px - 1)){
+    myColSize = smallColSize; 
+  }  
+  else {
+    myColSize = usualColSize;
+  }
   //cout << "everyday I'm mallocing myrank = " << myrank << endl;
   myE = alloc2D(myRowSize+2 , myColSize+2); 
   myE_prev = alloc2D(myRowSize+2 , myColSize+2); 
@@ -248,36 +269,13 @@ int main (int argc, char** argv)
   */
   // Initialization of myE_prev and myR
   
-  // calculate myX and myY
-  // myX = rank in terms of row
-  // myY = rank in terms of col
-  int myX = myrank % px;
-  int myY = myrank / px;
-  // lets say P = 8
-  // py = 4, px = 2, means
-  // rank0(myY = 0, myX = 0)     rank1(myY = 0, myX = 1)
-  // rank2(myY = 1, myX = 0)     rank3(myY = 1, myX = 1)
-  // rank4(myY = 2, myX = 0)     rank5(myY = 2, myX = 1)
-  // rank6(myY = 3, myX = 0)     rank7(myY = 3, myX = 1)
-
-  // works for 1d!
   for (j=1; j<=myRowSize; j++){
-      
-    // if condition for when process geometry doesnt evenly divide the matrix
-    if ((myY * myRowSize + j) == (m+1)){
-      myRowSize = j-1;
-      break;
-    }
     for (i=1; i<=myColSize; i++){
-      // if condition for when process geometry doesnt evenly divide the matrix
-      if ((myX * myColSize + i) == (n+1)){
-          myColSize = i-1;
-          break;
-      }
-      myE_prev[j][i] = E_prev[myY * myRowSize + j][myX * myColSize + i];
-      myR[j][i]      =      R[myY * myRowSize + j][myX * myColSize + i];
+      myE_prev[j][i] = E_prev[myY * usualRowSize + j][myX * usualColSize + i];
+      myR[j][i]      =      R[myY * usualRowSize + j][myX * usualColSize + i];
     }
   }
+  //cout << " new myRowSize = " << myRowSize << " myrank= " << myrank << " myY = " << myY << " myX = " << myX << endl; 
   double dx = 1.0/n;
 
   // For time integration, these values shouldn't change 
@@ -322,12 +320,10 @@ int main (int argc, char** argv)
   //cout << "finished I'm mallocing myrank = " << myrank << endl;
   //double sendBuff[myColSize + 2];
     
-  int usualRowSize = m / py;
-  usualRowSize = (py * usualRowSize == m) ? usualRowSize : (usualRowSize + 1);
-  int usualColSize = n / px;
-  usualColSize = (px * usualColSize == n) ? usualColSize : (usualColSize + 1);
-  int smallRowSize = m - (py-1) * usualRowSize;
-  int smallColSize = n - (px-1) * usualColSize;
+  
+  //cout << "usualRowSize = " << usualRowSize << " smallRowSize = " << smallRowSize << "myY = " << myY << endl;
+  
+  //cout << "on dead homies myX = " << myX << "  myY = " << myY << " myrank = " << myrank << " myRowSize = " << myRowSize << " myColSize = " << myColSize << endl;
   // TODO: doesnt work for 2x4 and 1x8, works for 4x2 and 8x1
   // no errors, but getting false L2 and Linf values
   // probable cause: communication with east and west at the same time 
@@ -407,13 +403,13 @@ int main (int argc, char** argv)
     }
 
     if (myX  == 0){
-      // mirror east
+      // mirror west
       for (i = 1; i <= myRowSize; i++)
         myE_prev[i][0] = myE_prev[i][2];
     }
     
     if (myX  == px - 1){
-      // mirror west
+      // mirror east
       for (i = 1; i <= myRowSize; i++)
         myE_prev[i][myColSize + 1] = myE_prev[i][myColSize - 1];
     }
@@ -534,10 +530,19 @@ int main (int argc, char** argv)
          for (j = 1; j <= px; j++){
            if (j == 1 && currentY == 0)
              continue;
-           if (j == px)
-             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], smallColSize, MPI_DOUBLE, currentY * px + j - 1, currentY * px + j - 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-           else
-             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], usualColSize, MPI_DOUBLE, currentY * px + j - 1, currentY * px + j - 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+           if (j == px){
+             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], smallColSize, MPI_DOUBLE, currentY * px + j - 1, currentY * px + j - 1, MPI_COMM_WORLD, &mpi_stats[0]);
+           }
+            else{
+             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], usualColSize, MPI_DOUBLE, currentY * px + j - 1, currentY * px + j - 1, MPI_COMM_WORLD, &mpi_stats[0]);
+            }
+            //
+            //
+            // debug
+            //int count;
+            //MPI_Get_count(&mpi_stats[0], MPI_DOUBLE, &count);
+            //if (i == 0)
+            //cout << "myrank = " << myrank << "received " << count << " elements with mpi_tag = " << mpi_stats[0].MPI_TAG << endl; 
           }
         }
         else if (myY == currentY){
@@ -547,8 +552,10 @@ int main (int argc, char** argv)
               continue;
             // TODO: fix index i
             // maybe i % usualRowSize
-            if (myrank == (currentY * px + j - 1))
+            if (myrank == (currentY * px + j - 1)){
               MPI_Send(&myE_prev[myIndex][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, myrank, MPI_COMM_WORLD);
+              //if (myIndex == m) cout << "myrank = " << myrank << " currentY = " << currentY << " px = " << px << endl;
+              }
           }
         }
       } // end of for
