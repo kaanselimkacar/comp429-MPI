@@ -95,32 +95,8 @@ void simulate (double** E,  double** E_prev,double** R,
      * on the boundary of the computational box
      * Using mirror boundaries
      */
-    /*
-    #pragma omp parallel for
-    for (j=1; j<=m; j++){ 
-      E_prev[j][0] = E_prev[j][2];
-      E_prev[j][n+1] = E_prev[j][n-1];
-    }
-    */
-    /*
-    for (j=1; j<=m; j++) 
-      E_prev[j][0] = E_prev[j][2];
-    // no need for a second loop, can combine loops
-    for (j=1; j<=m; j++) 
-      E_prev[j][n+1] = E_prev[j][n-1];
-    */
-    // fix this for MPI programming
-    
-    /* 
-    for (i=1; i<=n; i++) 
-      E_prev[0][i] = E_prev[2][i];
-    // no need for a second loop, can combine loops
-    for (i=1; i<=n; i++) 
-      E_prev[m+1][i] = E_prev[m-1][i];
-    */
-    #pragma omp parallel
     {
-
+      cout << "my thread id = " << omp_get_thread_num() << endl;
       // Solve for the excitation, the PDE
       #pragma omp for collapse(2)
       for (j=1; j<=m; j++){
@@ -351,7 +327,9 @@ int main (int argc, char** argv)
     // receive west  -- tag3
    
     // ALLAH BU MILLETE BU KODU BI DAHA YAZDIRMASIN
-
+    
+    //cout << "sa dÃnya myrank = " << myrank << endl;
+    
     if (myY > 0 && !no_comm){
       // send/recv north
       
@@ -422,7 +400,6 @@ int main (int argc, char** argv)
         myE_prev[i][myColSize + 1] = myE_prev[i][myColSize - 1];
     }
    
-    //cout << "Waiting! t = " << t << "  myrank = " << myrank << endl;
     // wait for Isends and Irecvs
     for (i = 0; i < 8; i++){
         if (reqs[i] == MPI_REQUEST_NULL || no_comm)
@@ -452,8 +429,11 @@ int main (int argc, char** argv)
     }
  
     //cout << "Simulating t = " << t << "  myrank = " << myrank << endl;
+    #pragma omp parallel num_threads(num_threads)
+    {
     simulate(myE, myE_prev, myR, alpha, myColSize, myRowSize, kk, dt, a, epsilon, M1, M2, b); 
-   
+    }
+    
     double **tmp2 = myE; myE = myE_prev; myE_prev = tmp2; 
     if (plot_freq){
       // Gather data from all processes
@@ -545,6 +525,7 @@ int main (int argc, char** argv)
     
     // copy the data of rank 0 to E
     if (myrank == 0 && !no_comm){
+      #pragma omp parallel for collapse(2)
       for (i = 1; i <= myRowSize; i++){
         for(j = 1; j <= myColSize; j++){
           E_prev[i][j] = myE_prev[i][j];
@@ -562,6 +543,7 @@ int main (int argc, char** argv)
         if (senderX == (px - 1) && senderY == (py - 1)){
           MPI_Recv(&recvBuffer[1][1], (smallColSize+2) * smallRowSize, MPI_DOUBLE, rank, rank, MPI_COMM_WORLD, &mpi_stats[0]); 
           // cook
+          #pragma omp parallel for collapse(2)
           for(i = 1; i <= smallRowSize; i++){
             for(j = 1; j <= smallColSize; j++){
               E_prev[senderY * usualRowSize + i][senderX * usualColSize + j] = recvBuffer[i][j];
@@ -570,6 +552,7 @@ int main (int argc, char** argv)
         }
         else if (senderX == (px - 1)){
           MPI_Recv(&recvBuffer[1][1], (smallColSize+2) * usualRowSize, MPI_DOUBLE, rank, rank, MPI_COMM_WORLD, &mpi_stats[0]); 
+          #pragma omp parallel for collapse(2)
           for(i = 1; i <= usualRowSize; i++){
             for(j = 1; j <= smallColSize; j++){
               E_prev[senderY * usualRowSize + i][senderX * usualColSize + j] = recvBuffer[i][j];
@@ -579,6 +562,7 @@ int main (int argc, char** argv)
         }
         else if (senderY == (py - 1)){
           MPI_Recv(&recvBuffer[1][1], (usualColSize+2) * smallRowSize, MPI_DOUBLE, rank, rank, MPI_COMM_WORLD, &mpi_stats[0]); 
+          #pragma omp parallel for collapse(2)
           for(i = 1; i <= smallRowSize; i++){
             for(j = 1; j <= usualColSize; j++){
               E_prev[senderY * usualRowSize + i][senderX * usualColSize + j] = recvBuffer[i][j];
@@ -588,6 +572,7 @@ int main (int argc, char** argv)
         }
         else {
           MPI_Recv(&recvBuffer[1][1], (usualColSize+2) * usualRowSize, MPI_DOUBLE, rank, rank, MPI_COMM_WORLD, &mpi_stats[0]); 
+          #pragma omp parallel for collapse(2)
           for(i = 1; i <= usualRowSize; i++){
             for(j = 1; j <= usualColSize; j++){
               E_prev[senderY * usualRowSize + i][senderX * usualColSize + j] = recvBuffer[i][j];
