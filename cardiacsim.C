@@ -62,9 +62,17 @@ double **alloc2D(int m,int n){
      double mx = -1;
      double l2norm = 0;
      int i, j;
+
+     //nan check
+  
+
      for (j=1; j<=m; j++)
        for (i=1; i<=n; i++) {
 	   l2norm += E[j][i]*E[j][i];
+    //  cout << l2norm << endl;
+     if(isnan(E[j][i])){
+      cout << "has nan value at " << i << ", " << j << endl;
+      break;}
 	   if (E[j][i] > mx)
 	       mx = E[j][i];
       }
@@ -128,7 +136,7 @@ void simulate (double** E,  double** E_prev,double** R,
       * Solve the ODE, advancing excitation and recovery to the
       *     next timtestep
       */
-      #pragma omp parallel for collapse(2)  
+      // #pragma omp parallel for collapse(2)  
       for (j=1; j<=m; j++){
         for (i=1; i<=n; i++){
 	        E[j][i] = E[j][i] -dt*(kk* E[j][i]*(E[j][i] - a)*(E[j][i]-1)+ E[j][i] *R[j][i]);
@@ -396,7 +404,7 @@ int main (int argc, char** argv)
         myE_prev[0][i] = myE_prev[2][i];
     }
      
-    if (myY  == py - 1){
+    if (myY  == (py - 1)){
       // mirror south
       for (i = 1; i <= myColSize; i++)
         myE_prev[myRowSize + 1][i] = myE_prev[myRowSize - 1][i];
@@ -408,7 +416,7 @@ int main (int argc, char** argv)
         myE_prev[i][0] = myE_prev[i][2];
     }
     
-    if (myX  == px - 1){
+    if (myX  == (px - 1)){
       // mirror east
       for (i = 1; i <= myRowSize; i++)
         myE_prev[i][myColSize + 1] = myE_prev[i][myColSize - 1];
@@ -417,8 +425,10 @@ int main (int argc, char** argv)
     //cout << "Waiting! t = " << t << "  myrank = " << myrank << endl;
     // wait for Isends and Irecvs
     for (i = 0; i < 8; i++){
-        if (reqs[i] == MPI_REQUEST_NULL)
-            continue;
+        if (reqs[i] == MPI_REQUEST_NULL){
+          // if(t == dt)
+          // cout << myrank << " skipped" << endl;
+            continue;}
        
         //cout << "waiting! myrank = " << myrank << endl;
         MPI_Wait(&reqs[i], &mpi_stats[i]);
@@ -446,67 +456,57 @@ int main (int argc, char** argv)
     simulate(myE, myE_prev, myR, alpha, myColSize, myRowSize, kk, dt, a, epsilon, M1, M2, b); 
    
     double **tmp2 = myE; myE = myE_prev; myE_prev = tmp2; 
-    if (plot_freq){
-      // Gather data from all processes
-      if (P != 1){
-        // TODO: fix for 2d
-        //MPI_Gather(&myE[1][0], (n+2) * (myRowSize), MPI_DOUBLE, &E[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
-        
-        // idea: gather row by row
-        // need to be carefull because when myY == py -1 myRowSize will be smaller than other processes
-        // also when myX == px - 1 myColSize will be smaller than other processes
-        
-        // copy the data of rank 0 to E
-        if (myrank == 0){
-          for (i = 1; i <= myRowSize; i++){
-            for(j = 1; j <= myColSize; j++){
-              E[i][j] = myE[i][j];
-            }
-          }
-        }
-        int currentY = -1;
-        for (i = 1; i <= m; i++){
-          int myIndex = (i % myRowSize == 0) ? myRowSize : i % myRowSize; // myIndex ranges from 1 ,2 , ... , myRowSize
-          if (( (i - 1) % usualRowSize) == 0){
-            currentY++;
-          }
-          if (myrank == 0){
-            // receive the messages
-            for (j = 1; j <= px; j++){
-              if (j == 1 && currentY == 0)
-                continue;
-              if (j == (px -1))
-                MPI_Recv(&E[i][usualColSize * (j-1) + 1], smallColSize, MPI_DOUBLE, currentY + j - 1, j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-              else
-                MPI_Recv(&E[i][usualColSize * (j-1) + 1], usualColSize, MPI_DOUBLE, currentY + j - 1, j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            }
-          }
-          else if (myY == currentY){
-            // send a single row of data 
-            for (j = 1; j <= px; j++){
-              if (j == 1 && currentY == 0)
-                continue;
-              if (myrank == (currentY + j - 1))
-                MPI_Send(&myE[myIndex][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
-            }
-          }
-        } // end of for
-        
-        int k = (int)(t/plot_freq);
-        if ((t - k * plot_freq) < dt){
-	      splot(E,t,niter,m+2,n+2);
-        }
-      }
-      else{
-        int k = (int)(t/plot_freq);
-        if ((t - k * plot_freq) < dt){
-	      splot(myE,t,niter,m+2,n+2);
-        }
-        
-      }
-    MPI_Barrier(MPI_COMM_WORLD);
+
+  }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    double mx;
+    double l2norm;
+
+
+    // l2norm = stats(myE_prev,myRowSize, myColSize,&mx);
+
+    // //double l2norm = stats(E,m,n,&mx);
+    // cout << myrank << " Max: " << mx <<  " L2norm: "<< l2norm << endl;
+
+    
+  //   // Print matrix
+  //   // cout << myrank << "MATRIX: "<< endl;
+  //  double min = 1000;
+  //   for (i = 0; i<myRowSize ; i++){
+  //     // cout << myrank << endl;
+  //     for(j = 0; j < myColSize; j++){
+  //       if (myE_prev[i][j] < min)
+  //       min = myE_prev[i][j];
+  //     }
+  //     // cout << endl;
+  //   }
+  //   cout << "myrank " << min << endl;  
+  
+  
+  // pregather nan check
+  for(i = 0; i <= myRowSize+1; i++){
+    for(j = 0; j <= myColSize+1; j++){
+      if(isnan(myE_prev[i][j]))
+        cout << myrank << "has nan at" << i << "," << j << endl;
     }
-  }//end of while loop
+  }
+
+  // if(myX == 4){
+  //   for (i = 0; i<130; i++){
+  //     cout << myE_prev[1023][i] << " ";
+  //   }
+  // }
+  
+  
+  //end of while loop
   //cout << "Still alive !! Still alive!!  myrank = " << myrank << endl;
   // TODO: fix for 2d
   if (P != 1){
@@ -530,8 +530,9 @@ int main (int argc, char** argv)
          for (j = 1; j <= px; j++){
            if (j == 1 && currentY == 0)
              continue;
+            
            if (j == px){
-             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], smallColSize, MPI_DOUBLE, currentY * px + j - 1, currentY * px + j - 1, MPI_COMM_WORLD, &mpi_stats[0]);
+             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], usualColSize, MPI_DOUBLE, currentY * px + j - 1, currentY * px + j - 1, MPI_COMM_WORLD, &mpi_stats[0]);
            }
             else{
              MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], usualColSize, MPI_DOUBLE, currentY * px + j - 1, currentY * px + j - 1, MPI_COMM_WORLD, &mpi_stats[0]);
@@ -543,8 +544,22 @@ int main (int argc, char** argv)
             //MPI_Get_count(&mpi_stats[0], MPI_DOUBLE, &count);
             //if (i == 0)
             //cout << "myrank = " << myrank << "received " << count << " elements with mpi_tag = " << mpi_stats[0].MPI_TAG << endl; 
+            int mercan;
+            int canmer;
+            for(mercan = 1; mercan <= m; mercan++){
+              for (canmer = 1; canmer <= n; canmer ++){
+                if (isnan(E_prev[mercan][canmer])){
+                cout << usualColSize * (j-1) + 1 << endl;
+                cout << mercan << "," << canmer << "at " << currentY << ", " << j << endl;
+                E_prev[mercan][canmer] = 0.0;
+                }
+              }
+            }
           }
         }
+
+
+        
         else if (myY == currentY){
           // send a single row of data 
           for (j = 1; j <= px; j++){
@@ -553,6 +568,7 @@ int main (int argc, char** argv)
             // TODO: fix index i
             // maybe i % usualRowSize
             if (myrank == (currentY * px + j - 1)){
+              
               MPI_Send(&myE_prev[myIndex][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, myrank, MPI_COMM_WORLD);
               //if (myIndex == m) cout << "myrank = " << myrank << " currentY = " << currentY << " px = " << px << endl;
               }
