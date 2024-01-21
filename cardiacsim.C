@@ -325,7 +325,7 @@ int main (int argc, char** argv)
   double *sendBuffEast = (double *) malloc((sizeof(double) * (myRowSize + 2)));;
   
   // init recv arrays
-  for (i = 1 ; i <= myRowSize; i ++) {
+  for (i = 1 ; i <= myRowSize; i++) {
       recvBuffWest[i] = 0;
       recvBuffEast[i] = 0;
   }
@@ -517,14 +517,11 @@ int main (int argc, char** argv)
     MPI_Barrier(MPI_COMM_WORLD);
     }
   }//end of while loop
-  //cout << "Still alive !! Still alive!!  myrank = " << myrank << endl;
+  cout << "Still alive !! Still alive!!  myrank = " << myrank << endl;
   // TODO: fix for 2d
   if (P != 1){
     //MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD );
     
-    double penis;
-    if (myrank == P - 1)
-        stats(myE_prev, myRowSize, myColSize, &penis);
     /*
     //debug
     //print of elements of myE_prev of each process
@@ -547,6 +544,57 @@ int main (int argc, char** argv)
         }
       }
     }
+    // each process sends their data to rank 0
+    if (myrank == 0)
+    {
+        //double *recvBuffer = (double *) malloc(sizeof(double) * usualRowSize * (usualColSize + 2) + 2);
+      double **recvBuffer = alloc2D(usualRowSize + 2, usualColSize + 2);
+      for (int rank = 1; rank < P; rank++)
+      {
+        int senderX = rank % px , senderY = rank / px;
+        if (senderX == (px - 1) && senderY == (py - 1)){
+          MPI_Recv(&recvBuffer[1][1], (smallColSize+2) * smallRowSize, MPI_DOUBLE, rank, rank, MPI_COMM_WORLD, &mpi_stats[0]); 
+          // cook
+          for(i = 1; i <= smallRowSize; i++){
+            for(j = 1; j <= smallColSize; j++){
+              E_prev[senderY * usualRowSize + i][senderX * usualColSize + j] = recvBuffer[i][j];
+            }
+          }
+        }
+        else if (senderX == (px - 1)){
+          MPI_Recv(&recvBuffer[1][1], (smallColSize+2) * usualRowSize, MPI_DOUBLE, rank, rank, MPI_COMM_WORLD, &mpi_stats[0]); 
+          for(i = 1; i <= usualRowSize; i++){
+            for(j = 1; j <= smallColSize; j++){
+              E_prev[senderY * usualRowSize + i][senderX * usualColSize + j] = recvBuffer[i][j];
+            }
+          }
+            
+        }
+        else if (senderY == (py - 1)){
+          MPI_Recv(&recvBuffer[1][1], (usualColSize+2) * smallRowSize, MPI_DOUBLE, rank, rank, MPI_COMM_WORLD, &mpi_stats[0]); 
+          for(i = 1; i <= smallRowSize; i++){
+            for(j = 1; j <= usualColSize; j++){
+              E_prev[senderY * usualRowSize + i][senderX * usualColSize + j] = recvBuffer[i][j];
+            }
+          }
+           
+        }
+        else {
+          MPI_Recv(&recvBuffer[1][1], (usualColSize+2) * usualRowSize, MPI_DOUBLE, rank, rank, MPI_COMM_WORLD, &mpi_stats[0]); 
+          for(i = 1; i <= usualRowSize; i++){
+            for(j = 1; j <= usualColSize; j++){
+              E_prev[senderY * usualRowSize + i][senderX * usualColSize + j] = recvBuffer[i][j];
+            }
+          }
+
+        }
+      } // end of for
+     free(recvBuffer); 
+    }// end of if   
+    else{
+        MPI_Send(&myE_prev[1][1], myRowSize * (myColSize + 2), MPI_DOUBLE, 0, myrank, MPI_COMM_WORLD);
+    }
+    /*
     int currentY = -1;
     for (i = 1; i <= m; i++){
       if (( (i - 1) % usualRowSize) == 0){
@@ -582,7 +630,7 @@ int main (int argc, char** argv)
             // TODO: fix index i
             // maybe i % usualRowSize
             if (myrank == (currentY * px + j - 1)){
-              cout << "myrank = " << myrank << " myIndex = " << myIndex << " starting col index = " << usualColSize * (j-1) + 1 << " myColSize = " << myColSize << " smallColSize = " << smallColSize << endl; 
+              //cout << "myrank = " << myrank << " myIndex = " << myIndex << " starting col index = " << usualColSize * (j-1) + 1 << " myColSize = " << myColSize << " smallColSize = " << smallColSize << endl; 
               MPI_Send(&myE_prev[myIndex][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, myrank, MPI_COMM_WORLD);
               //if (myIndex == m) cout << "myrank = " << myrank << " currentY = " << currentY << " px = " << px << endl;
               }
@@ -590,6 +638,7 @@ int main (int argc, char** argv)
         }
         MPI_Barrier(MPI_COMM_WORLD);
       } // end of for
+      */
   } // end of if P != 1
   
   //cout << "Still alive !! Still alive!!  Still alive!! myrank = " << myrank << endl;
