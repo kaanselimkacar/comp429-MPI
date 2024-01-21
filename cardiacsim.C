@@ -116,26 +116,30 @@ void simulate (double** E,  double** E_prev,double** R,
     for (i=1; i<=n; i++) 
       E_prev[m+1][i] = E_prev[m-1][i];
     */
+    #pragma omp parallel
+    {
 
-    // Solve for the excitation, the PDE
-    for (j=1; j<=m; j++){
-      for (i=1; i<=n; i++) {
-	     E[j][i] = E_prev[j][i]+alpha*(E_prev[j][i+1]+E_prev[j][i-1]-4*E_prev[j][i]+E_prev[j+1][i]+E_prev[j-1][i]);
-        }
-      }
-    
-      /* 
-      * Solve the ODE, advancing excitation and recovery to the
-      *     next timtestep
-      */
-      #pragma omp parallel for collapse(2)  
+      // Solve for the excitation, the PDE
+      #pragma omp for collapse(2)
       for (j=1; j<=m; j++){
-        for (i=1; i<=n; i++){
-	        E[j][i] = E[j][i] -dt*(kk* E[j][i]*(E[j][i] - a)*(E[j][i]-1)+ E[j][i] *R[j][i]);
-	        R[j][i] = R[j][i] + dt*(epsilon+M1* R[j][i]/( E[j][i]+M2))*(-R[j][i]-kk* E[j][i]*(E[j][i]-b-1));
+        for (i=1; i<=n; i++) {
+	       E[j][i] = E_prev[j][i]+alpha*(E_prev[j][i+1]+E_prev[j][i-1]-4*E_prev[j][i]+E_prev[j+1][i]+E_prev[j-1][i]);
+          }
         }
-      }
     
+        /* 
+        * Solve the ODE, advancing excitation and recovery to the
+        *     next timtestep
+        */
+        #pragma omp for collapse(2)  
+        for (j=1; j<=m; j++){
+          for (i=1; i<=n; i++){
+	          E[j][i] = E[j][i] -dt*(kk* E[j][i]*(E[j][i] - a)*(E[j][i]-1)+ E[j][i] *R[j][i]);
+	          R[j][i] = R[j][i] + dt*(epsilon+M1* R[j][i]/( E[j][i]+M2))*(-R[j][i]-kk* E[j][i]*(E[j][i]-b-1));
+          }
+        }
+    
+      }// pragma omp parallel
 }
 
 // Main program
@@ -324,7 +328,6 @@ int main (int argc, char** argv)
   //cout << "usualRowSize = " << usualRowSize << " smallRowSize = " << smallRowSize << "myY = " << myY << endl;
   
   //cout << "on dead homies myX = " << myX << "  myY = " << myY << " myrank = " << myrank << " myRowSize = " << myRowSize << " myColSize = " << myColSize << endl;
-  // TODO: doesnt work for 2x4 and 1x8, works for 4x2 and 8x1
   // no errors, but getting false L2 and Linf values
   // probable cause: communication with east and west at the same time 
   //cout << "Still alive !!  myrank = " << myrank << endl;
@@ -422,11 +425,12 @@ int main (int argc, char** argv)
        
         //cout << "waiting! myrank = " << myrank << endl;
         MPI_Wait(&reqs[i], &mpi_stats[i]);
+        reqs[i] = MPI_REQUEST_NULL;
         //cout << "waited! myrank = " << myrank << endl;
         // debug
         //int count;
-        //MPI_Get_count(&mpi_stats[i], MPI_INT, &count);
-        //cout << "myrank = " << myrank << "received " << count << "elements with mpi_tag = " << mpi_stats[i].MPI_TAG << endl; 
+        //MPI_Get_count(&mpi_stats[i], MPI_DOUBLE, &count);
+        //cout << "myrank = " << myrank << " received " << count << " elements with mpi_tag = " << mpi_stats[i].MPI_TAG << endl; 
     }
     //cout << "Waited! t = " << t << "  myrank = " << myrank << endl;
 
@@ -510,7 +514,21 @@ int main (int argc, char** argv)
   //cout << "Still alive !! Still alive!!  myrank = " << myrank << endl;
   // TODO: fix for 2d
   if (P != 1){
-    //MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
+    //MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD );
+    /*
+    //debug
+    //print of elements of myE_prev of each process
+    for (int k = 0; k < P ; k++){
+      if (myrank == k){
+        for (i = 1 ; i <= myRowSize; i++){
+          for (j = 1; j <= myColSize; j++)
+            cout << myE_prev[i][j];
+          cout << endl;
+        }      
+      }
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
+    */
     // copy the data of rank 0 to E
     if (myrank == 0){
       for (i = 1; i <= myRowSize; i++){
@@ -563,7 +581,13 @@ int main (int argc, char** argv)
   
   //cout << "Still alive !! Still alive!!  Still alive!! myrank = " << myrank << endl;
   if (myrank == 0)
-  {  
+  { 
+    //nan check
+   for (i = 1; i <= n; i++)
+     for (j = 1; j <= m; j++)
+        if (isnan(E_prev[i][j]))
+          cout << "NANNNN i = " << i << " j = " << j  << endl;
+     
     double time_elapsed = getTime() - t0;
 
     double Gflops = (double)(niter * (1E-9 * n * n ) * 28.0) / time_elapsed ;
@@ -573,7 +597,16 @@ int main (int argc, char** argv)
     cout << "Elapsed Time (sec)          : " << time_elapsed << endl;
     cout << "Sustained Gflops Rate       : " << Gflops << endl; 
     cout << "Sustained Bandwidth (GB/sec): " << BW << endl << endl; 
-
+   
+    /* 
+    // debug
+    // print out elements of E_prev
+    for (i = 1; i <= m ; i++){
+      for (j = 1; j <= n; j++)
+        cout << E_prev[i][j];
+      cout << endl;
+    }
+    */
     double mx;
     double l2norm;
     if (P == 1){
