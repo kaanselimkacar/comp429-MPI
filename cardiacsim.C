@@ -67,8 +67,8 @@ double **alloc2D(int m,int n){
 	   l2norm += E[j][i]*E[j][i];
 	   if (E[j][i] > mx)
 	       mx = E[j][i];
-       if (E[j][i] > 1 || E[j][i] < 0)
-        cout << "value of " << E[j][i] << " at row = " << j << " col = " << i << endl; 
+       //if (E[j][i] > 1 || E[j][i] < 0)
+        //cout << "value of " << E[j][i] << " at row = " << j << " col = " << i << endl; 
       }
      *_mx = mx;
      l2norm /= (double) ((m)*(n));
@@ -461,52 +461,71 @@ int main (int argc, char** argv)
         // TODO: fix for 2d
         //MPI_Gather(&myE[1][0], (n+2) * (myRowSize), MPI_DOUBLE, &E[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
        
- 
-        // idea: gather row by row
-        // need to be carefull because when myY == py -1 myRowSize will be smaller than other processes
-        // also when myX == px - 1 myColSize will be smaller than other processes
-        
-        // copy the data of rank 0 to E
-        if (myrank == 0){
-          for (i = 1; i <= myRowSize; i++){
-            for(j = 1; j <= myColSize; j++){
-              E[i][j] = myE[i][j];
+    // copy the data of rank 0 to E
+    if (myrank == 0){
+      for (i = 1; i <= myRowSize; i++){
+        for(j = 1; j <= myColSize; j++){
+          E[i][j] = myE[i][j];
+        }
+      }
+    }
+    // each process sends their data to rank 0
+    if (myrank == 0)
+    {
+        //double *recvBuffer = (double *) malloc(sizeof(double) * usualRowSize * (usualColSize + 2) + 2);
+      double **recvBuffer = alloc2D(usualRowSize + 2, usualColSize + 2);
+      for (int rank = 1; rank < P; rank++)
+      {
+        int senderX = rank % px , senderY = rank / px;
+        if (senderX == (px - 1) && senderY == (py - 1)){
+          MPI_Recv(&recvBuffer[1][1], (smallColSize+2) * smallRowSize, MPI_DOUBLE, rank, rank, MPI_COMM_WORLD, &mpi_stats[0]); 
+          // cook
+          for(i = 1; i <= smallRowSize; i++){
+            for(j = 1; j <= smallColSize; j++){
+              E[senderY * usualRowSize + i][senderX * usualColSize + j] = recvBuffer[i][j];
             }
           }
         }
-        int currentY = -1;
-        for (i = 1; i <= m; i++){
-          int myIndex = (i % myRowSize == 0) ? myRowSize : i % myRowSize; // myIndex ranges from 1 ,2 , ... , myRowSize
-          if (( (i - 1) % usualRowSize) == 0){
-            currentY++;
-          }
-          if (myrank == 0){
-            // receive the messages
-            for (j = 1; j <= px; j++){
-              if (j == 1 && currentY == 0)
-                continue;
-              if (j == (px -1))
-                MPI_Recv(&E[i][usualColSize * (j-1) + 1], smallColSize, MPI_DOUBLE, currentY + j - 1, j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-              else
-                MPI_Recv(&E[i][usualColSize * (j-1) + 1], usualColSize, MPI_DOUBLE, currentY + j - 1, j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        else if (senderX == (px - 1)){
+          MPI_Recv(&recvBuffer[1][1], (smallColSize+2) * usualRowSize, MPI_DOUBLE, rank, rank, MPI_COMM_WORLD, &mpi_stats[0]); 
+          for(i = 1; i <= usualRowSize; i++){
+            for(j = 1; j <= smallColSize; j++){
+              E[senderY * usualRowSize + i][senderX * usualColSize + j] = recvBuffer[i][j];
             }
           }
-          else if (myY == currentY){
-            // send a single row of data 
-            for (j = 1; j <= px; j++){
-              if (j == 1 && currentY == 0)
-                continue;
-              if (myrank == (currentY + j - 1))
-                MPI_Send(&myE[myIndex][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, j, MPI_COMM_WORLD);
+            
+        }
+        else if (senderY == (py - 1)){
+          MPI_Recv(&recvBuffer[1][1], (usualColSize+2) * smallRowSize, MPI_DOUBLE, rank, rank, MPI_COMM_WORLD, &mpi_stats[0]); 
+          for(i = 1; i <= smallRowSize; i++){
+            for(j = 1; j <= usualColSize; j++){
+              E[senderY * usualRowSize + i][senderX * usualColSize + j] = recvBuffer[i][j];
             }
           }
-        } // end of for
-        
+           
+        }
+        else {
+          MPI_Recv(&recvBuffer[1][1], (usualColSize+2) * usualRowSize, MPI_DOUBLE, rank, rank, MPI_COMM_WORLD, &mpi_stats[0]); 
+          for(i = 1; i <= usualRowSize; i++){
+            for(j = 1; j <= usualColSize; j++){
+              E[senderY * usualRowSize + i][senderX * usualColSize + j] = recvBuffer[i][j];
+            }
+          }
+
+        }
+      } // end of for
+     free(recvBuffer); 
+    }// end of if   
+    else{
+        MPI_Send(&myE[1][1], myRowSize * (myColSize + 2), MPI_DOUBLE, 0, myrank, MPI_COMM_WORLD);
+        }
+      if (myrank == 0){ 
         int k = (int)(t/plot_freq);
         if ((t - k * plot_freq) < dt){
 	      splot(E,t,niter,m+2,n+2);
         }
       }
+    } // end of if P!=1
       else{
         int k = (int)(t/plot_freq);
         if ((t - k * plot_freq) < dt){
@@ -515,9 +534,11 @@ int main (int argc, char** argv)
         
       }
     MPI_Barrier(MPI_COMM_WORLD);
-    }
+    }// end of if plot_freq
+  
   }//end of while loop
-  cout << "Still alive !! Still alive!!  myrank = " << myrank << endl;
+  
+  //cout << "Still alive !! Still alive!!  myrank = " << myrank << endl;
   // TODO: fix for 2d
   if (P != 1){
     //MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD );
