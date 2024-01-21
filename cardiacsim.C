@@ -67,6 +67,8 @@ double **alloc2D(int m,int n){
 	   l2norm += E[j][i]*E[j][i];
 	   if (E[j][i] > mx)
 	       mx = E[j][i];
+       if (E[j][i] > 1 || E[j][i] < 0)
+        cout << "value of " << E[j][i] << " at row = " << j << " col = " << i << endl; 
       }
      *_mx = mx;
      l2norm /= (double) ((m)*(n));
@@ -116,11 +118,11 @@ void simulate (double** E,  double** E_prev,double** R,
     for (i=1; i<=n; i++) 
       E_prev[m+1][i] = E_prev[m-1][i];
     */
-    #pragma omp parallel
+    //#pragma omp parallel
     {
 
       // Solve for the excitation, the PDE
-      #pragma omp for collapse(2)
+      //#pragma omp for collapse(2)
       for (j=1; j<=m; j++){
         for (i=1; i<=n; i++) {
 	       E[j][i] = E_prev[j][i]+alpha*(E_prev[j][i+1]+E_prev[j][i-1]-4*E_prev[j][i]+E_prev[j+1][i]+E_prev[j-1][i]);
@@ -131,7 +133,7 @@ void simulate (double** E,  double** E_prev,double** R,
         * Solve the ODE, advancing excitation and recovery to the
         *     next timtestep
         */
-        #pragma omp for collapse(2)  
+        //#pragma omp for collapse(2)  
         for (j=1; j<=m; j++){
           for (i=1; i<=n; i++){
 	          E[j][i] = E[j][i] -dt*(kk* E[j][i]*(E[j][i] - a)*(E[j][i]-1)+ E[j][i] *R[j][i]);
@@ -321,9 +323,12 @@ int main (int argc, char** argv)
   double *recvBuffEast = (double *) malloc((sizeof(double) * (myRowSize + 2)));;
   double *sendBuffWest = (double *) malloc((sizeof(double) * (myRowSize + 2)));;
   double *sendBuffEast = (double *) malloc((sizeof(double) * (myRowSize + 2)));;
-  //cout << "finished I'm mallocing myrank = " << myrank << endl;
-  //double sendBuff[myColSize + 2];
-    
+  
+  // init recv arrays
+  for (i = 1 ; i <= myRowSize; i ++) {
+      recvBuffWest[i] = 0;
+      recvBuffEast[i] = 0;
+  }
   
   //cout << "usualRowSize = " << usualRowSize << " smallRowSize = " << smallRowSize << "myY = " << myY << endl;
   
@@ -455,7 +460,8 @@ int main (int argc, char** argv)
       if (P != 1){
         // TODO: fix for 2d
         //MPI_Gather(&myE[1][0], (n+2) * (myRowSize), MPI_DOUBLE, &E[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD ); 
-        
+       
+ 
         // idea: gather row by row
         // need to be carefull because when myY == py -1 myRowSize will be smaller than other processes
         // also when myX == px - 1 myColSize will be smaller than other processes
@@ -515,6 +521,10 @@ int main (int argc, char** argv)
   // TODO: fix for 2d
   if (P != 1){
     //MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD );
+    
+    double penis;
+    if (myrank == P - 1)
+        stats(myE_prev, myRowSize, myColSize, &penis);
     /*
     //debug
     //print of elements of myE_prev of each process
@@ -542,7 +552,8 @@ int main (int argc, char** argv)
       if (( (i - 1) % usualRowSize) == 0){
         currentY++;
        }
-       int myIndex = (i % myRowSize == 0) ? myRowSize : i % myRowSize; // myIndex ranges from 1 ,2 , ... , myRowSize
+       //int myIndex = (i % myRowSize == 0) ? myRowSize : i % myRowSize; // myIndex ranges from 1 ,2 , ... , myRowSize
+       int myIndex = (i % usualRowSize == 0) ? usualRowSize : i % usualRowSize; // myIndex ranges from 1 ,2 , ... , myRowSize
        if (myrank == 0){
        // receive the messages
          for (j = 1; j <= px; j++){
@@ -571,23 +582,26 @@ int main (int argc, char** argv)
             // TODO: fix index i
             // maybe i % usualRowSize
             if (myrank == (currentY * px + j - 1)){
+              cout << "myrank = " << myrank << " myIndex = " << myIndex << " starting col index = " << usualColSize * (j-1) + 1 << " myColSize = " << myColSize << " smallColSize = " << smallColSize << endl; 
               MPI_Send(&myE_prev[myIndex][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, myrank, MPI_COMM_WORLD);
               //if (myIndex == m) cout << "myrank = " << myrank << " currentY = " << currentY << " px = " << px << endl;
               }
           }
         }
+        MPI_Barrier(MPI_COMM_WORLD);
       } // end of for
   } // end of if P != 1
   
   //cout << "Still alive !! Still alive!!  Still alive!! myrank = " << myrank << endl;
   if (myrank == 0)
   { 
+   /*
     //nan check
    for (i = 1; i <= n; i++)
      for (j = 1; j <= m; j++)
         if (isnan(E_prev[i][j]))
           cout << "NANNNN i = " << i << " j = " << j  << endl;
-     
+     */
     double time_elapsed = getTime() - t0;
 
     double Gflops = (double)(niter * (1E-9 * n * n ) * 28.0) / time_elapsed ;
