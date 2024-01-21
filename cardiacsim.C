@@ -96,7 +96,7 @@ void simulate (double** E,  double** E_prev,double** R,
      * Using mirror boundaries
      */
     {
-      cout << "my thread id = " << omp_get_thread_num() << endl;
+      //cout << "my thread id = " << omp_get_thread_num() << endl;
       // Solve for the excitation, the PDE
       #pragma omp for collapse(2)
       for (j=1; j<=m; j++){
@@ -154,9 +154,6 @@ int main (int argc, char** argv)
   cmdLine( argc, argv, T, n,px, py, plot_freq, no_comm, num_threads);
   m = n;  
 
-  //TODO: add support for when the process number does not divide n
-  // possible solution: add + 1 to myRowSize, and check for matrix size
-  // if rowIndex * myrank * (n+2) < n+2 * n+2
   MPI_Request reqs[8] = {MPI_REQUEST_NULL,
                           MPI_REQUEST_NULL,
                            MPI_REQUEST_NULL,
@@ -178,11 +175,9 @@ int main (int argc, char** argv)
   // The computational box is defined on [1:m+1,1:n+1]
   // We pad the arrays in order to facilitate differencing on the 
   // boundaries of the computation box
-  //cout << "everyday I'm mallocing myrank = " << myrank << endl;
   E = alloc2D(m+2,n+2);
   E_prev = alloc2D(m+2,n+2);
   R = alloc2D(m+2,n+2);
-  //cout << "finished I'm mallocing myrank = " << myrank << endl;
  
   // create temp variables to free them later
   double *tempE = &E[0][0];
@@ -230,25 +225,10 @@ int main (int argc, char** argv)
   else {
     myColSize = usualColSize;
   }
-  //cout << "everyday I'm mallocing myrank = " << myrank << endl;
   myE = alloc2D(myRowSize+2 , myColSize+2); 
   myE_prev = alloc2D(myRowSize+2 , myColSize+2); 
   myR = alloc2D(myRowSize+2 , myColSize+2); 
-  //cout << "finished I'm mallocing myrank = " << myrank << endl;
   
-  /* 6* 6, lets say P = 3, then myrank e {0,1,2}, myRowSize = 2
- *  for 0 it should be j*1 + 0   j + myrank * myRowSize
- *  for 1 it should be j*1 + 2
- *  for 2 it should be j*1 + 4 
-  12345678 
-  12345678 -- 0
-  12345678 -- 0
-  12345678 -- 1
-  12345678 -- 1
-  12345678 -- 2
-  12345678 -- 2
-  12345678
-  */
   // Initialization of myE_prev and myR
   
   for (j=1; j<=myRowSize; j++){
@@ -280,9 +260,6 @@ int main (int argc, char** argv)
     cout << endl;
   }
   
-  //cout << "before barrier myrank = " << myrank << endl;
-  //MPI_Barrier(MPI_COMM_WORLD);
-  //cout << "after barrier myrank = " << myrank << endl;
   // Start the timer
   double t0 = getTime();
   
@@ -294,7 +271,7 @@ int main (int argc, char** argv)
   int niter=0;
   
   int tag1 = 1, tag2 = 2, tag3 = 3, tag4 = 4;
-  //cout << "everyday I'm mallocing myrank = " << myrank << endl;
+  
   double *recvBuffWest = (double *) malloc((sizeof(double) * (myRowSize + 2)));;
   double *recvBuffEast = (double *) malloc((sizeof(double) * (myRowSize + 2)));;
   double *sendBuffWest = (double *) malloc((sizeof(double) * (myRowSize + 2)));;
@@ -307,10 +284,6 @@ int main (int argc, char** argv)
   }
   
   //cout << "usualRowSize = " << usualRowSize << " smallRowSize = " << smallRowSize << "myY = " << myY << endl;
-  
-  //cout << "on dead homies myX = " << myX << "  myY = " << myY << " myrank = " << myrank << " myRowSize = " << myRowSize << " myColSize = " << myColSize << endl;
-  // no errors, but getting false L2 and Linf values
-  // probable cause: communication with east and west at the same time 
   //cout << "Still alive !!  myrank = " << myrank << endl;
   while (t<T) {
     t += dt;
@@ -405,10 +378,8 @@ int main (int argc, char** argv)
         if (reqs[i] == MPI_REQUEST_NULL || no_comm)
             continue;
        
-        //cout << "waiting! myrank = " << myrank << endl;
         MPI_Wait(&reqs[i], &mpi_stats[i]);
         reqs[i] = MPI_REQUEST_NULL;
-        //cout << "waited! myrank = " << myrank << endl;
         // debug
         //int count;
         //MPI_Get_count(&mpi_stats[i], MPI_DOUBLE, &count);
@@ -452,7 +423,6 @@ int main (int argc, char** argv)
     // each process sends their data to rank 0
     if (myrank == 0)
     {
-        //double *recvBuffer = (double *) malloc(sizeof(double) * usualRowSize * (usualColSize + 2) + 2);
       double **recvBuffer = alloc2D(usualRowSize + 2, usualColSize + 2);
       for (int rank = 1; rank < P; rank++)
       {
@@ -519,7 +489,6 @@ int main (int argc, char** argv)
   }//end of while loop
   
   //cout << "Still alive !! Still alive!!  myrank = " << myrank << endl;
-  // TODO: fix for 2d
   if (P != 1){
     //MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD );
     
@@ -535,7 +504,6 @@ int main (int argc, char** argv)
     // each process sends their data to rank 0
     if (myrank == 0 && !no_comm)
     {
-        //double *recvBuffer = (double *) malloc(sizeof(double) * usualRowSize * (usualColSize + 2) + 2);
       double **recvBuffer = alloc2D(usualRowSize + 2, usualColSize + 2);
       for (int rank = 1; rank < P; rank++)
       {
@@ -618,7 +586,6 @@ int main (int argc, char** argv)
     else if (!no_comm){
         l2norm = stats(E_prev,m,n,&mx);
     }
-    //double l2norm = stats(E,m,n,&mx);
     cout << "Max: " << mx <<  " L2norm: "<< l2norm << endl;
 
     if (plot_freq){

@@ -1,0 +1,47 @@
+Running Job...!
+===============================================================================
+Running compiled binary...
+OMP_NUM_THREADS = 4, 4 MPI
+Parallel version with 1 processes
+--------------------------------------------------------------------------
+The following command line options and corresponding MCA parameter have
+been deprecated and replaced as follows:
+
+  Command line options:
+    Deprecated:  --cpus-per-proc, -cpus-per-proc, --cpus-per-rank, -cpus-per-rank
+    Replacement: --map-by <obj>:PE=N, default <obj>=NUMA
+
+  Equivalent MCA parameter:
+    Deprecated:  rmaps_base_cpus_per_proc
+    Replacement: rmaps_base_mapping_policy=<obj>:PE=N, default <obj>=NUMA
+
+The deprecated forms *will* disappear in a future version of Open MPI.
+Please update to the new syntax.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+The following command line options and corresponding MCA parameter have
+been deprecated and replaced as follows:
+
+  Command line options:
+    Deprecated:  --cpus-per-proc, -cpus-per-proc, --cpus-per-rank, -cpus-per-rank
+    Replacement: --map-by <obj>:PE=N, default <obj>=NUMA
+
+  Equivalent MCA parameter:
+    Deprecated:  rmaps_base_cpus_per_proc
+    Replacement: rmaps_base_mapping_policy=<obj>:PE=N, default <obj>=NUMA
+
+The deprecated forms *will* disappear in a future version of Open MPI.
+Please update to the new syntax.
+--------------------------------------------------------------------------
+Num Processes   : 4
+Grid Size       : 1024
+Duration of Sim : 100
+Time step dt    : 0.00431553
+Process geometry: 1 x 4
+
+Number of Iterations        : 23173
+Elapsed Time (sec)          : 20.7008
+Sustained Gflops Rate       : 32.8664
+Sustained Bandwidth (GB/sec): 37.5616
+
+Max: 0.979365 L2norm: 0.498186

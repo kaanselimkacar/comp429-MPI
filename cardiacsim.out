@@ -1,0 +1,49 @@
+Running Job...!
+===============================================================================
+Running compiled binary...
+Parallel version with 2 processes
+--------------------------------------------------------------------------
+By default, for Open MPI 4.0 and later, infiniband ports on a device
+are not used by default.  The intent is to use UCX for these devices.
+You can override this policy by setting the btl_openib_allow_ib MCA parameter
+to true.
+
+  Local host:              it04
+  Local adapter:           mlx5_0
+  Local port:              1
+
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+WARNING: There was an error initializing an OpenFabrics device.
+
+  Local host:   it04
+  Local device: mlx5_0
+--------------------------------------------------------------------------
+[it04:245883] *** Process received signal ***
+[it04:245883] Signal: Segmentation fault (11)
+[it04:245883] Signal code: Address not mapped (1)
+[it04:245883] Failing at address: (nil)
+Number of processes 2
+Grid Size       : 1024
+Duration of Sim : 1
+Time step dt    : 0.00431553
+Process geometry: 1 x 1
+
+[it04:245882] *** Process received signal ***
+[it04:245882] Signal: Segmentation fault (11)
+[it04:245882] Signal code: Address not mapped (1)
+[it04:245882] Failing at address: (nil)
+[it04:245882] [ 0] /lib64/libpthread.so.0(+0xf5e0)[0x7f77eaf475e0]
+[it04:245882] *** End of error message ***
+[it04:245883] [ 0] /lib64/libpthread.so.0(+0xf5e0)[0x7f303f0e35e0]
+[it04:245883] *** End of error message ***
+--------------------------------------------------------------------------
+Primary job  terminated normally, but 1 process returned
+a non-zero exit code. Per user-direction, the job has been aborted.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+mpirun noticed that process rank 0 with PID 245882 on node it04 exited on signal 11 (Segmentation fault).
+--------------------------------------------------------------------------
+[it04.kuacc.ku.edu.tr:245877] 1 more process has sent help message help-mpi-btl-openib.txt / ib port not selected
+[it04.kuacc.ku.edu.tr:245877] Set MCA parameter "orte_base_help_aggregate" to 0 to see all help / error messages
+[it04.kuacc.ku.edu.tr:245877] 1 more process has sent help message help-mpi-btl-openib.txt / error in device init

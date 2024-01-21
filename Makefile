@@ -1,6 +1,6 @@
 include ./arch.gnu
-# OPTIMIZATION = -fast
-# OPTIMIZATION = -O3
+OPTIMIZATION = -fast
+OPTIMIZATION = -O3
 DEBUG += -g
 
 
@@ -9,7 +9,7 @@ app:		cardiacsim
 OBJECTS = cardiacsim.o splot.o cmdLine.o
 
 cardiacsim:	        $(OBJECTS) 
-		$(C++LINK) $(LDFLAGS)  -o $@ $(OBJECTS)  $(LDLIBS)
+		$(C++LINK) $(LDFLAGS)  -o $@ $(OBJECTS)  $(LDLIBS) -fopenmp 
 
 clean:	
 	$(RM) *.o cardiacsim *~;
