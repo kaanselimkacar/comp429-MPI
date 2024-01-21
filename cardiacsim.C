@@ -118,11 +118,11 @@ void simulate (double** E,  double** E_prev,double** R,
     for (i=1; i<=n; i++) 
       E_prev[m+1][i] = E_prev[m-1][i];
     */
-    //#pragma omp parallel
+    #pragma omp parallel
     {
 
       // Solve for the excitation, the PDE
-      //#pragma omp for collapse(2)
+      #pragma omp for collapse(2)
       for (j=1; j<=m; j++){
         for (i=1; i<=n; i++) {
 	       E[j][i] = E_prev[j][i]+alpha*(E_prev[j][i+1]+E_prev[j][i-1]-4*E_prev[j][i]+E_prev[j+1][i]+E_prev[j-1][i]);
@@ -133,7 +133,7 @@ void simulate (double** E,  double** E_prev,double** R,
         * Solve the ODE, advancing excitation and recovery to the
         *     next timtestep
         */
-        //#pragma omp for collapse(2)  
+        #pragma omp for collapse(2)  
         for (j=1; j<=m; j++){
           for (i=1; i<=n; i++){
 	          E[j][i] = E[j][i] -dt*(kk* E[j][i]*(E[j][i] - a)*(E[j][i]-1)+ E[j][i] *R[j][i]);
@@ -352,7 +352,7 @@ int main (int argc, char** argv)
    
     // ALLAH BU MILLETE BU KODU BI DAHA YAZDIRMASIN
 
-    if (myY > 0){
+    if (myY > 0 && !no_comm){
       // send/recv north
       
       // receive from north
@@ -362,7 +362,7 @@ int main (int argc, char** argv)
       MPI_Isend(&myE_prev[1][1], myColSize, MPI_DOUBLE, myrank - px, tag1, MPI_COMM_WORLD, &reqs[1]);
     }
     
-    if (myY < (py - 1)){
+    if (myY < (py - 1) && !no_comm ){
       // send/recv south
       
       // receive from south
@@ -372,7 +372,7 @@ int main (int argc, char** argv)
       MPI_Isend(&myE_prev[myRowSize][1], myColSize, MPI_DOUBLE, myrank + px, tag2, MPI_COMM_WORLD, &reqs[3]);
     }
     
-    if (myX > 0){
+    if (myX > 0 && !no_comm){
       // send/recv from west
       // recv from west
       MPI_Irecv(&recvBuffWest[1], myRowSize, MPI_DOUBLE, myrank - 1, tag3, MPI_COMM_WORLD, &reqs[4]);
@@ -383,7 +383,7 @@ int main (int argc, char** argv)
       MPI_Isend(&sendBuffWest[1], myRowSize, MPI_DOUBLE, myrank - 1, tag4, MPI_COMM_WORLD, &reqs[5]);
     }
     
-    if (myX < (px - 1)){
+    if (myX < (px - 1) && !no_comm){
       // send/recv from east
       // recv from east
       MPI_Irecv(&recvBuffEast[1], myRowSize, MPI_DOUBLE, myrank + 1, tag4, MPI_COMM_WORLD, &reqs[6]);
@@ -425,7 +425,7 @@ int main (int argc, char** argv)
     //cout << "Waiting! t = " << t << "  myrank = " << myrank << endl;
     // wait for Isends and Irecvs
     for (i = 0; i < 8; i++){
-        if (reqs[i] == MPI_REQUEST_NULL)
+        if (reqs[i] == MPI_REQUEST_NULL || no_comm)
             continue;
        
         //cout << "waiting! myrank = " << myrank << endl;
@@ -440,12 +440,12 @@ int main (int argc, char** argv)
     //cout << "Waited! t = " << t << "  myrank = " << myrank << endl;
 
     // unpack the messages
-    if (myX > 0){
+    if (myX > 0 && !no_comm){
       // unpack message for west
       for (i = 1; i <= myRowSize; i++)
         myE_prev[i][0] = recvBuffWest[i];
     } 
-    if (myX < (px - 1)){
+    if (myX < (px - 1) && !no_comm){
       // unpack message for east
       for (i = 1; i <= myRowSize; i++)
         myE_prev[i][myColSize+1] = recvBuffEast[i];
@@ -543,22 +543,8 @@ int main (int argc, char** argv)
   if (P != 1){
     //MPI_Gather(&myE_prev[1][0], (n+2) * myRowSize, MPI_DOUBLE, &E_prev[1][0], myRowSize*(n+2), MPI_DOUBLE, 0, MPI_COMM_WORLD );
     
-    /*
-    //debug
-    //print of elements of myE_prev of each process
-    for (int k = 0; k < P ; k++){
-      if (myrank == k){
-        for (i = 1 ; i <= myRowSize; i++){
-          for (j = 1; j <= myColSize; j++)
-            cout << myE_prev[i][j];
-          cout << endl;
-        }      
-      }
-      MPI_Barrier(MPI_COMM_WORLD);
-    }
-    */
     // copy the data of rank 0 to E
-    if (myrank == 0){
+    if (myrank == 0 && !no_comm){
       for (i = 1; i <= myRowSize; i++){
         for(j = 1; j <= myColSize; j++){
           E_prev[i][j] = myE_prev[i][j];
@@ -566,7 +552,7 @@ int main (int argc, char** argv)
       }
     }
     // each process sends their data to rank 0
-    if (myrank == 0)
+    if (myrank == 0 && !no_comm)
     {
         //double *recvBuffer = (double *) malloc(sizeof(double) * usualRowSize * (usualColSize + 2) + 2);
       double **recvBuffer = alloc2D(usualRowSize + 2, usualColSize + 2);
@@ -612,66 +598,14 @@ int main (int argc, char** argv)
       } // end of for
      free(recvBuffer); 
     }// end of if   
-    else{
+    else if (!no_comm){
         MPI_Send(&myE_prev[1][1], myRowSize * (myColSize + 2), MPI_DOUBLE, 0, myrank, MPI_COMM_WORLD);
     }
-    /*
-    int currentY = -1;
-    for (i = 1; i <= m; i++){
-      if (( (i - 1) % usualRowSize) == 0){
-        currentY++;
-       }
-       //int myIndex = (i % myRowSize == 0) ? myRowSize : i % myRowSize; // myIndex ranges from 1 ,2 , ... , myRowSize
-       int myIndex = (i % usualRowSize == 0) ? usualRowSize : i % usualRowSize; // myIndex ranges from 1 ,2 , ... , myRowSize
-       if (myrank == 0){
-       // receive the messages
-         for (j = 1; j <= px; j++){
-           if (j == 1 && currentY == 0)
-             continue;
-           if (j == px){
-             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], smallColSize, MPI_DOUBLE, currentY * px + j - 1, currentY * px + j - 1, MPI_COMM_WORLD, &mpi_stats[0]);
-           }
-            else{
-             MPI_Recv(&E_prev[i][usualColSize * (j-1) + 1], usualColSize, MPI_DOUBLE, currentY * px + j - 1, currentY * px + j - 1, MPI_COMM_WORLD, &mpi_stats[0]);
-            }
-            //
-            //
-            // debug
-            //int count;
-            //MPI_Get_count(&mpi_stats[0], MPI_DOUBLE, &count);
-            //if (i == 0)
-            //cout << "myrank = " << myrank << "received " << count << " elements with mpi_tag = " << mpi_stats[0].MPI_TAG << endl; 
-          }
-        }
-        else if (myY == currentY){
-          // send a single row of data 
-          for (j = 1; j <= px; j++){
-            if (j == 1 && currentY == 0)
-              continue;
-            // TODO: fix index i
-            // maybe i % usualRowSize
-            if (myrank == (currentY * px + j - 1)){
-              //cout << "myrank = " << myrank << " myIndex = " << myIndex << " starting col index = " << usualColSize * (j-1) + 1 << " myColSize = " << myColSize << " smallColSize = " << smallColSize << endl; 
-              MPI_Send(&myE_prev[myIndex][usualColSize * (j-1) + 1], myColSize, MPI_DOUBLE, 0, myrank, MPI_COMM_WORLD);
-              //if (myIndex == m) cout << "myrank = " << myrank << " currentY = " << currentY << " px = " << px << endl;
-              }
-          }
-        }
-        MPI_Barrier(MPI_COMM_WORLD);
-      } // end of for
-      */
   } // end of if P != 1
   
   //cout << "Still alive !! Still alive!!  Still alive!! myrank = " << myrank << endl;
   if (myrank == 0)
   { 
-   /*
-    //nan check
-   for (i = 1; i <= n; i++)
-     for (j = 1; j <= m; j++)
-        if (isnan(E_prev[i][j]))
-          cout << "NANNNN i = " << i << " j = " << j  << endl;
-     */
     double time_elapsed = getTime() - t0;
 
     double Gflops = (double)(niter * (1E-9 * n * n ) * 28.0) / time_elapsed ;
@@ -691,12 +625,12 @@ int main (int argc, char** argv)
       cout << endl;
     }
     */
-    double mx;
-    double l2norm;
-    if (P == 1){
+    double mx = 1;
+    double l2norm = 0;
+    if (P == 1 && !no_comm){
         l2norm = stats(myE_prev,m,n,&mx);
     }
-    else{
+    else if (!no_comm){
         l2norm = stats(E_prev,m,n,&mx);
     }
     //double l2norm = stats(E,m,n,&mx);
